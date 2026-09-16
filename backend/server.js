@@ -45,6 +45,48 @@ const circleHeaders = {
   "Content-Type": "application/json",
 };
 
+// Arc network the frontend is currently pointed at (see MAINNET_TODO.md
+// step 4). frontend/src/services/api.js sends this on every request.
+// KNOWN_NETWORKS/getRequestNetwork/escrowNetwork are the single place this
+// gets read/normalized — see the note there about pre-launch records.
+const KNOWN_NETWORKS = new Set(["mainnet", "testnet"]);
+
+function getRequestNetwork(req) {
+  const requested = String(req.get("X-ProofPay-Network") || "").toLowerCase();
+  return KNOWN_NETWORKS.has(requested) ? requested : "mainnet";
+}
+
+// Every escrow created before 2026-09-16 (the mainnet launch) predates this
+// field and has no `network` value. Treat a missing value as testnet, never
+// mainnet — old data must never be mistaken for real-money data.
+function escrowNetwork(escrow) {
+  return KNOWN_NETWORKS.has(escrow?.network) ? escrow.network : "testnet";
+}
+
+// Circle Wallets API blockchain enum, per network. Circle's docs only
+// document "ARC-TESTNET" as of the mainnet launch — CIRCLE_MAINNET_BLOCKCHAIN
+// is deliberately unset until that value is confirmed in Circle's Developer
+// Console/docs (see MAINNET_TODO.md step 5). Do not hardcode a guess here.
+const CIRCLE_BLOCKCHAIN_BY_NETWORK = {
+  testnet: "ARC-TESTNET",
+  mainnet: process.env.CIRCLE_MAINNET_BLOCKCHAIN || null,
+};
+
+function requireCircleBlockchain(network, res) {
+  const blockchain = CIRCLE_BLOCKCHAIN_BY_NETWORK[network];
+
+  if (!blockchain) {
+    res.status(501).json({
+      success: false,
+      message:
+        "Circle wallets on Arc Mainnet are not configured yet. Set CIRCLE_MAINNET_BLOCKCHAIN once Circle confirms the mainnet blockchain identifier (see MAINNET_TODO.md, step 5).",
+    });
+    return null;
+  }
+
+  return blockchain;
+}
+
 const escrows = {};
 const PENDING_ESCROW_EXPIRY_MS = 12 * 60 * 60 * 1000;
 const dataDirectory = process.env.DATA_DIR ||
@@ -361,12 +403,15 @@ app.post("/api/circle/initialize-user", async (req, res) => {
       });
     }
 
+    const blockchain = requireCircleBlockchain(getRequestNetwork(req), res);
+    if (!blockchain) return;
+
     const response = await axios.post(
       `${CIRCLE_API_URL}/v1/w3s/user/initialize`,
       {
         idempotencyKey: crypto.randomUUID(),
         accountType: "EOA",
-        blockchains: ["ARC-TESTNET"],
+        blockchains: [blockchain],
       },
       {
         headers: {
@@ -401,6 +446,9 @@ app.get("/api/circle/wallets", async (req, res) => {
     });
   }
 
+  const blockchain = requireCircleBlockchain(getRequestNetwork(req), res);
+  if (!blockchain) return;
+
   try {
     const response = await axios.get(
       `${CIRCLE_API_URL}/v1/w3s/wallets`,
@@ -410,7 +458,7 @@ app.get("/api/circle/wallets", async (req, res) => {
           "X-User-Token": userToken,
         },
         params: {
-          blockchain: "ARC-TESTNET",
+          blockchain,
         },
       }
     );
@@ -427,55 +475,72 @@ app.get("/api/circle/wallets", async (req, res) => {
   }
 });
 
-const PROOFPAY_ESCROW_ADDRESS =
-  "0xCd0f43E573899809ff96C560439570A760698C9a";
-const ARC_TESTNET_USDC_ADDRESS =
-  "0x3600000000000000000000000000000000000000";
-const PROOFPAY_EURC_ESCROW_ADDRESS =
-  "0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7";
-const ARC_TESTNET_EURC_ADDRESS =
-  "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
-const PROOFPAY_CIRBTC_ESCROW_ADDRESS =
-  "0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B";
-const ARC_TESTNET_CIRBTC_ADDRESS =
-  "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF";
 const escrowFunctions = new Set([
   "createEscrow(string,address,uint256)",
   "confirmDelivery(string)",
   "releaseFunds(string)",
   "refund(string)",
 ]);
-const CIRCLE_CONTRACT_ALLOWLIST = new Map([
-  [
-    PROOFPAY_ESCROW_ADDRESS.toLowerCase(),
-    escrowFunctions,
-  ],
-  [
-    ARC_TESTNET_USDC_ADDRESS.toLowerCase(),
-    new Set(["approve(address,uint256)"]),
-  ],
-  [PROOFPAY_EURC_ESCROW_ADDRESS.toLowerCase(), escrowFunctions],
-  [ARC_TESTNET_EURC_ADDRESS.toLowerCase(), new Set(["approve(address,uint256)"])],
-  [PROOFPAY_CIRBTC_ESCROW_ADDRESS.toLowerCase(), escrowFunctions],
-  [ARC_TESTNET_CIRBTC_ADDRESS.toLowerCase(), new Set(["approve(address,uint256)"])],
-]);
-const ESCROW_ASSETS = new Map([
-  ["USDC", {
-    decimals: 6,
-    tokenAddress: ARC_TESTNET_USDC_ADDRESS,
-    escrowContractAddress: PROOFPAY_ESCROW_ADDRESS,
-  }],
-  ["EURC", {
-    decimals: 6,
-    tokenAddress: ARC_TESTNET_EURC_ADDRESS,
-    escrowContractAddress: PROOFPAY_EURC_ESCROW_ADDRESS,
-  }],
-  ["cirBTC", {
-    decimals: 8,
-    tokenAddress: ARC_TESTNET_CIRBTC_ADDRESS,
-    escrowContractAddress: PROOFPAY_CIRBTC_ESCROW_ADDRESS,
-  }],
-]);
+const APPROVE_FUNCTION = new Set(["approve(address,uint256)"]);
+
+// Deployed and on-chain-verified 2026-09-16 — see MAINNET_TODO.md step 2
+// for the tx hashes/block numbers. No cirBTC entry: Circle has not
+// published a mainnet cirBTC contract (MAINNET_TODO.md step 1).
+const ESCROW_ASSETS_BY_NETWORK = {
+  mainnet: new Map([
+    ["USDC", {
+      decimals: 6,
+      tokenAddress: "0x3600000000000000000000000000000000000000",
+      escrowContractAddress: "0x626B2731A11B39A782992B57ED102012b607BC79",
+    }],
+    ["EURC", {
+      decimals: 6,
+      tokenAddress: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+      escrowContractAddress: "0xF6f0178e40dbF82D79e7E90a9b07AB0f32b862C0",
+    }],
+  ]),
+  testnet: new Map([
+    ["USDC", {
+      decimals: 6,
+      tokenAddress: "0x3600000000000000000000000000000000000000",
+      escrowContractAddress: "0xCd0f43E573899809ff96C560439570A760698C9a",
+    }],
+    ["EURC", {
+      decimals: 6,
+      tokenAddress: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+      escrowContractAddress: "0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7",
+    }],
+    ["cirBTC", {
+      decimals: 8,
+      tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
+      escrowContractAddress: "0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B",
+    }],
+  ]),
+};
+
+function getEscrowAssets(network) {
+  return ESCROW_ASSETS_BY_NETWORK[network] || ESCROW_ASSETS_BY_NETWORK.testnet;
+}
+
+function buildContractAllowlist(assets) {
+  const allowlist = new Map();
+
+  for (const asset of assets.values()) {
+    allowlist.set(asset.escrowContractAddress.toLowerCase(), escrowFunctions);
+    allowlist.set(asset.tokenAddress.toLowerCase(), APPROVE_FUNCTION);
+  }
+
+  return allowlist;
+}
+
+const CIRCLE_CONTRACT_ALLOWLIST_BY_NETWORK = {
+  mainnet: buildContractAllowlist(ESCROW_ASSETS_BY_NETWORK.mainnet),
+  testnet: buildContractAllowlist(ESCROW_ASSETS_BY_NETWORK.testnet),
+};
+
+function getContractAllowlist(network) {
+  return CIRCLE_CONTRACT_ALLOWLIST_BY_NETWORK[network] || CIRCLE_CONTRACT_ALLOWLIST_BY_NETWORK.testnet;
+}
 
 function getCircleUserToken(req, res) {
   const userToken = req.get("X-User-Token");
@@ -501,7 +566,7 @@ app.post("/api/circle/contract-execution", async (req, res) => {
     req.body.abiFunctionSignature || ""
   ).trim();
   const abiParameters = req.body.abiParameters;
-  const allowedFunctions = CIRCLE_CONTRACT_ALLOWLIST.get(
+  const allowedFunctions = getContractAllowlist(getRequestNetwork(req)).get(
     contractAddress.toLowerCase()
   );
 
@@ -771,7 +836,7 @@ app.get("/api/health", async (req, res) => {
       status: "ok",
       service: "proofpay-backend",
       database: databasePool ? "connected" : "local-file",
-      network: "Arc Testnet",
+      network: getRequestNetwork(req) === "mainnet" ? "Arc Mainnet" : "Arc Testnet",
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -792,13 +857,16 @@ app.get("/api/health", async (req, res) => {
 */
 
 app.post("/api/escrow", async (req, res) => {
+  const network = getRequestNetwork(req);
   const assetSymbol = req.body.assetSymbol || "USDC";
-  const asset = ESCROW_ASSETS.get(assetSymbol);
+  const asset = getEscrowAssets(network).get(assetSymbol);
 
   if (!asset) {
     return res.status(400).json({
       success: false,
-      message: "Choose USDC, EURC, or cirBTC for this escrow.",
+      message: network === "mainnet"
+        ? "Choose USDC or EURC for this escrow."
+        : "Choose USDC, EURC, or cirBTC for this escrow.",
     });
   }
 
@@ -808,6 +876,7 @@ app.post("/api/escrow", async (req, res) => {
 
   const escrow = {
     ...req.body,
+    network,
     assetSymbol,
     assetDecimals: asset.decimals,
     tokenAddress: asset.tokenAddress,
@@ -1284,8 +1353,9 @@ function isDisputeAdmin(wallet) {
 
 app.get("/api/admin/disputes", async (req, res) => {
   if (!isDisputeAdmin(req.query.wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
+  const network = getRequestNetwork(req);
   const allEscrows = await loadEscrows();
-  const withDispute = allEscrows.filter((escrow) => escrow.dispute);
+  const withDispute = allEscrows.filter((escrow) => escrow.dispute && escrowNetwork(escrow) === network);
   return res.json({
     success: true,
     disputes: withDispute.filter((escrow) => escrow.status === "Disputed"),
@@ -1405,6 +1475,7 @@ app.post("/api/escrow/:id/reject", async (req, res) => {
 
 app.get("/api/escrows", async (req, res) => {
 
+  const network = getRequestNetwork(req);
   const allEscrows = await loadEscrows();
 
   const { category, buyerWallet, wallet, role } = req.query;
@@ -1420,6 +1491,8 @@ app.get("/api/escrows", async (req, res) => {
   const recordRole = role === "seller" ? "seller" : "buyer";
 
   const activeEscrows = allEscrows.filter((escrow) => {
+    if (escrowNetwork(escrow) !== network) return false;
+
     const belongsToConnectedWallet = !connectedWallet || (
       recordRole === "seller"
         ? escrow.sellerWallet?.toLowerCase() === connectedWallet
@@ -1445,7 +1518,10 @@ app.get("/api/escrows", async (req, res) => {
 */
 
 app.get("/api/escrow-stats", async (req, res) => {
-  const allEscrows = await loadEscrows();
+  const network = getRequestNetwork(req);
+  const allEscrowsRaw = await loadEscrows();
+  const allEscrows = allEscrowsRaw.filter((escrow) => escrowNetwork(escrow) === network);
+  const assets = getEscrowAssets(network);
   const lockedEscrows = allEscrows.filter(
     (escrow) => escrow.status === "Funds Locked" || escrow.status === "Delivered"
   );
@@ -1454,7 +1530,7 @@ app.get("/api/escrow-stats", async (req, res) => {
   ).length;
 
   const lockedByAsset = lockedEscrows.reduce((totals, escrow) => {
-    const symbol = ESCROW_ASSETS.has(escrow.assetSymbol) ? escrow.assetSymbol : "USDC";
+    const symbol = assets.has(escrow.assetSymbol) ? escrow.assetSymbol : "USDC";
     totals[symbol] += Number(escrow.amount) || 0;
     return totals;
   }, { USDC: 0, EURC: 0, cirBTC: 0 });
