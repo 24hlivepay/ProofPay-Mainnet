@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import api, { API_BASE_URL } from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { resolveDisputeOnChain } from "../services/proofpayContract";
+import { getExplorerTxUrl } from "../config/network";
 
 export default function AdminDisputes() {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ function ResolvedCase({ escrow, wallet }) {
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
       <p className="font-bold text-green-900">Admin decision</p>
       <p className="mt-2 whitespace-pre-wrap text-sm text-green-800">{resolution.note}</p>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm"><p className="font-semibold text-green-900">{resolution.buyerAmount} to buyer · {resolution.sellerAmount} to seller</p><a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={`https://testnet.arcscan.app/tx/${resolution.transactionHash}`}>View settlement ↗</a></div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm"><p className="font-semibold text-green-900">{resolution.buyerAmount} to buyer · {resolution.sellerAmount} to seller</p><a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={getExplorerTxUrl(resolution.transactionHash)}>View settlement ↗</a></div>
     </div>
   </article>;
 }

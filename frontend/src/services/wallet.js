@@ -1,17 +1,14 @@
 import { BrowserProvider } from "ethers";
+import { getNetworkConfig } from "../config/network";
 
-export const ARC_TESTNET_CHAIN_ID = 5042002;
-const ARC_TESTNET_CHAIN_HEX = "0x4cef52";
-const ARC_TESTNET_NETWORK = {
-  chainId: ARC_TESTNET_CHAIN_HEX,
-  chainName: "Arc Testnet",
-  nativeCurrency: {
-    name: "USDC",
-    symbol: "USDC",
-    decimals: 18,
-  },
-  rpcUrls: ["https://rpc.testnet.arc.network"],
-};
+function getWalletAddEthereumChainParams(network = getNetworkConfig()) {
+  return {
+    chainId: network.chainHex,
+    chainName: network.chainName,
+    nativeCurrency: network.nativeCurrency,
+    rpcUrls: [network.rpcUrl],
+  };
+}
 
 const WALLET_DETAILS = {
   metamask: {
@@ -62,7 +59,8 @@ async function getWalletProvider(walletType) {
   return exactProvider || getInjectedWallet(walletType);
 }
 
-export async function ensureArcTestnet(onStatus, walletProvider) {
+export async function ensureArcNetwork(onStatus, walletProvider) {
+  const network = getNetworkConfig();
   const walletType = localStorage.getItem("proofpay-wallet-type") || "metamask";
   const walletLabel = WALLET_DETAILS[walletType]?.label || "wallet";
   const ethereum = walletProvider || await getWalletProvider(walletType);
@@ -74,29 +72,29 @@ export async function ensureArcTestnet(onStatus, walletProvider) {
     method: "eth_chainId",
   });
 
-  if (currentChainId.toLowerCase() === ARC_TESTNET_CHAIN_HEX) {
+  if (currentChainId.toLowerCase() === network.chainHex) {
     return "already-connected";
   }
 
   try {
-    onStatus?.(`Switching ${walletLabel} to Arc Testnet...`);
+    onStatus?.(`Switching ${walletLabel} to ${network.chainName}...`);
     await ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: ARC_TESTNET_CHAIN_HEX }],
+      params: [{ chainId: network.chainHex }],
     });
     return "switched";
   } catch (error) {
     if (error.code === 4902) {
       try {
-        onStatus?.(`Arc Testnet is not in ${walletLabel}. Adding it now...`);
+        onStatus?.(`${network.chainName} is not in ${walletLabel}. Adding it now...`);
         await ethereum.request({
           method: "wallet_addEthereumChain",
-          params: [ARC_TESTNET_NETWORK],
+          params: [getWalletAddEthereumChainParams(network)],
         });
-        onStatus?.("Arc Testnet added. Switching your wallet...");
+        onStatus?.(`${network.chainName} added. Switching your wallet...`);
         await ethereum.request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId: ARC_TESTNET_CHAIN_HEX }],
+          params: [{ chainId: network.chainHex }],
         });
         return "added-and-switched";
       } catch (addError) {
@@ -169,7 +167,7 @@ export async function connectWalletWithOptions({
   }
 
   await ethereum.request({ method: "eth_requestAccounts" });
-  const networkStatus = await ensureArcTestnet(onStatus, ethereum);
+  const networkStatus = await ensureArcNetwork(onStatus, ethereum);
 
   const provider = new BrowserProvider(ethereum);
   const signer = await provider.getSigner();

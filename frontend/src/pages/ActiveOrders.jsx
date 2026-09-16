@@ -8,6 +8,7 @@ import {
   confirmDeliveryOnChain,
   releaseFundsOnChain,
 } from "../services/proofpayContract";
+import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 export default function ActiveOrders() {
   const navigate = useNavigate();
@@ -232,9 +233,9 @@ export default function ActiveOrders() {
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 p-4">
                   <div>
                     <p className="font-bold text-green-800">✓ {order.assetSymbol || "USDC"} deposit successful</p>
-                    <p className="mt-1 text-sm text-green-700">Funds are locked in the Arc Testnet escrow contract.</p>
+                    <p className="mt-1 text-sm text-green-700">Funds are locked in the {getNetworkConfig().chainName} escrow contract.</p>
                   </div>
-                  <a href={`https://testnet.arcscan.app/tx/${order.depositTransactionHash}`} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50">
+                  <a href={getExplorerTxUrl(order.depositTransactionHash)} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-50">
                     View on Arcscan ↗
                   </a>
                 </div>

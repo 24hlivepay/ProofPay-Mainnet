@@ -11,29 +11,26 @@ import {
 } from "../services/wallet";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
+import { getEscrowAssets } from "../config/escrowAssets";
+import { getCurrentNetworkId, getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
-const ARC_EXPLORER_TX_URL = "https://testnet.arcscan.app/tx/";
 const CIRCLE_FAUCET_URL = "https://faucet.circle.com/?allow=true";
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ];
-const ARC_TESTNET_TOKENS = [
-  {
-    id: "arc-eurc",
-    symbol: "EURC",
-    name: "EURC",
-    tokenAddress: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
-    decimals: 6,
-  },
-  {
-    id: "arc-cirbtc",
-    symbol: "cirBTC",
-    name: "Circle Wrapped Bitcoin",
-    tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
-    decimals: 8,
-  },
-];
+
+function getWalletTokens() {
+  return getEscrowAssets()
+    .filter((asset) => asset.symbol !== "USDC")
+    .map((asset) => ({
+      id: `arc-${asset.symbol.toLowerCase()}`,
+      symbol: asset.symbol,
+      name: asset.name,
+      tokenAddress: asset.tokenAddress,
+      decimals: asset.decimals,
+    }));
+}
 
 export default function CircleWallet() {
   const navigate = useNavigate();
@@ -69,10 +66,11 @@ export default function CircleWallet() {
     try {
       setBalanceLoading(true);
       if (!isCircleWallet) {
+        const walletTokens = getWalletTokens();
         const { provider } = await connectWallet();
         const [nativeBalance, ...tokenBalances] = await Promise.all([
           provider.getBalance(address),
-          ...ARC_TESTNET_TOKENS.map((token) =>
+          ...walletTokens.map((token) =>
             new Contract(token.tokenAddress, ERC20_ABI, provider).balanceOf(address)
           ),
         ]);
@@ -80,13 +78,13 @@ export default function CircleWallet() {
           token: {
             id: "arc-native-usdc",
             symbol: "USDC",
-            name: "Arc Testnet native USDC",
+            name: `${getNetworkConfig().chainName} native USDC`,
             decimals: 18,
             isNative: true,
             standard: "NATIVE",
           },
           amount: formatUnits(nativeBalance, 18),
-        }, ...ARC_TESTNET_TOKENS.map((token, index) => ({
+        }, ...walletTokens.map((token, index) => ({
           token: {
             ...token,
             isNative: false,
@@ -167,7 +165,7 @@ export default function CircleWallet() {
       );
       setError("");
     } catch {
-      setError("The Arc Testnet wallet data is temporarily unavailable.");
+      setError(`The ${getNetworkConfig().chainName} wallet data is temporarily unavailable.`);
     } finally {
       setBalanceLoading(false);
     }
@@ -355,7 +353,7 @@ export default function CircleWallet() {
               {address}
             </p>
             <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold">
-              Arc Testnet
+              {getNetworkConfig().chainName}
             </span>
           </div>
           <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
@@ -392,7 +390,7 @@ export default function CircleWallet() {
         )}
         {transactionHash && (
           <a
-            href={`${ARC_EXPLORER_TX_URL}${transactionHash}`}
+            href={getExplorerTxUrl(transactionHash)}
             target="_blank"
             rel="noreferrer"
             className="mt-3 inline-block font-semibold text-blue-600 hover:text-blue-700"
@@ -407,8 +405,11 @@ export default function CircleWallet() {
               Deposit / Receive Tokens
             </h2>
             <p className="mt-2 leading-6 text-slate-600">
-              Send only Arc Testnet assets to this address. Tokens from another
-              network can be permanently lost. Test tokens have no financial value.
+              Send only {getNetworkConfig().chainName} assets to this address. Tokens from
+              another network can be permanently lost.
+              {getCurrentNetworkId() === "testnet"
+                ? " Test tokens have no financial value."
+                : " These are real funds."}
             </p>
             <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
               <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
@@ -424,14 +425,16 @@ export default function CircleWallet() {
                 {copied ? "Address copied" : "Copy address"}
               </button>
             </div>
-            <a
-              href={CIRCLE_FAUCET_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-5 inline-flex rounded-xl border border-blue-200 px-5 py-3 font-semibold text-blue-700 hover:bg-blue-50"
-            >
-              Get 20 test USDC from Circle Faucet ↗
-            </a>
+            {getCurrentNetworkId() === "testnet" && (
+              <a
+                href={CIRCLE_FAUCET_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex rounded-xl border border-blue-200 px-5 py-3 font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                Get 20 test USDC from Circle Faucet ↗
+              </a>
+            )}
           </section>
         )}
 
@@ -450,7 +453,7 @@ export default function CircleWallet() {
               <div className="mt-5 divide-y divide-slate-100">
                 {!balanceLoading && assets.length === 0 && (
                   <p className="py-6 text-center text-slate-500">
-                    No Arc Testnet assets detected yet.
+                    No {getNetworkConfig().chainName} assets detected yet.
                   </p>
                 )}
                 {assets.map((asset) => (
@@ -494,7 +497,7 @@ export default function CircleWallet() {
                     return (
                   <a
                     key={transaction.id}
-                    href={transaction.txHash ? `${ARC_EXPLORER_TX_URL}${transaction.txHash}` : undefined}
+                    href={transaction.txHash ? getExplorerTxUrl(transaction.txHash) : undefined}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center justify-between gap-4 py-4 hover:bg-slate-50"
@@ -510,7 +513,7 @@ export default function CircleWallet() {
                       <p className="mt-1 text-sm text-slate-500">
                         {transaction.createDate
                           ? new Date(transaction.createDate).toLocaleString()
-                          : "Arc Testnet"}
+                          : getNetworkConfig().chainName}
                       </p>
                     </div>
                     <div className="text-right">

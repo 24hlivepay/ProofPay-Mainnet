@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { releaseFundsOnChain } from "../services/proofpayContract";
+import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 export default function EscrowActive() {
   const navigate = useNavigate();
@@ -118,7 +119,7 @@ export default function EscrowActive() {
               <>
                 <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
                 <h2 className="mt-5 text-2xl font-bold text-slate-900">Release in progress</h2>
-                <p className="mt-3 text-slate-600">Your transaction is being confirmed on Arc Testnet. Please keep this page open.</p>
+                <p className="mt-3 text-slate-600">Your transaction is being confirmed on {getNetworkConfig().chainName}. Please keep this page open.</p>
               </>
             )}
 
@@ -150,10 +151,10 @@ function TransactionProof({ hash, assetSymbol = "USDC" }) {
   return (
     <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-green-200 bg-green-50 p-5">
       <div>
-        <p className="font-bold text-green-800">✓ Deposit confirmed on Arc Testnet</p>
+        <p className="font-bold text-green-800">✓ Deposit confirmed on {getNetworkConfig().chainName}</p>
         <p className="mt-1 text-sm text-green-700">The buyer's {assetSymbol} lock transaction is recorded on-chain.</p>
       </div>
-      <a href={`https://testnet.arcscan.app/tx/${hash}`} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 font-bold text-blue-700 shadow-sm hover:bg-blue-50">
+      <a href={getExplorerTxUrl(hash)} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 font-bold text-blue-700 shadow-sm hover:bg-blue-50">
         View on Arcscan ↗
       </a>
     </div>

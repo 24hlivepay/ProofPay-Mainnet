@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api, { API_BASE_URL } from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
+import { getExplorerTxUrl } from "../config/network";
 
 const MAX_SIZE = 2 * 1024 * 1024;
 
@@ -102,7 +103,7 @@ export default function DisputeResponse() {
         <p className="mt-3 text-sm font-semibold text-green-900">
           {resolution.buyerAmount} {order.assetSymbol} to buyer · {resolution.sellerAmount} {order.assetSymbol} to seller
         </p>
-        <a className="mt-2 inline-block text-sm font-semibold text-blue-700 underline" target="_blank" rel="noreferrer" href={`https://testnet.arcscan.app/tx/${resolution.transactionHash}`}>View settlement on Arcscan ↗</a>
+        <a className="mt-2 inline-block text-sm font-semibold text-blue-700 underline" target="_blank" rel="noreferrer" href={getExplorerTxUrl(resolution.transactionHash)}>View settlement on Arcscan ↗</a>
       </div>}
 
       {status && <p className="mt-5 rounded-xl bg-blue-50 p-3 text-blue-800">{status}</p>}

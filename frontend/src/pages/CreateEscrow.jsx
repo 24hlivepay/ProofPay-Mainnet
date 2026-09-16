@@ -11,7 +11,7 @@ import {
   getCircleAuthSession,
   getWalletSession,
 } from "../services/wallet";
-import { ESCROW_ASSETS, getEscrowAsset } from "../config/escrowAssets";
+import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -218,7 +218,7 @@ export default function CreateEscrow() {
                     }}
                     className="min-w-0 flex-1 appearance-auto bg-white py-2 text-lg font-bold outline-none"
                   >
-                    {ESCROW_ASSETS.map((asset) => (
+                    {getEscrowAssets().map((asset) => (
                       <option key={asset.symbol} value={asset.symbol}>
                         {asset.symbol}
                       </option>

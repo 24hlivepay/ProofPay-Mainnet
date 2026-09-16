@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectWalletWithOptions, getWalletErrorMessage } from "../../services/wallet";
 import api from "../../services/api";
+import { getNetworkConfig } from "../../config/network";
 
 export default function Hero() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function Hero() {
         signature: walletSession.signature,
         signedAt: walletSession.signedAt,
       });
-      setWalletStatus("Wallet connected to Arc Testnet. Opening your dashboard...");
+      setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}. Opening your dashboard...`);
       setShowWalletChoices(false);
       navigate("/dashboard");
     } catch (error) {
@@ -110,7 +111,7 @@ export default function Hero() {
                   Connect a wallet
                 </h2>
                 <p className="mt-2 text-sm text-slate-500">
-                  Choose a wallet that supports Arc Testnet.
+                  Choose a wallet that supports {getNetworkConfig().chainName}.
                 </p>
               </div>
               <button

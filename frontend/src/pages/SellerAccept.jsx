@@ -6,6 +6,7 @@ import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { connectWalletWithOptions } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
+import { getExplorerAddressUrl, getNetworkConfig } from "../config/network";
 
 export default function SellerAccept() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function SellerAccept() {
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState("");
   const asset = getEscrowAsset(escrowData.assetSymbol);
-  const contractUrl = `https://testnet.arcscan.app/address/${asset.escrowAddress}`;
+  const contractUrl = getExplorerAddressUrl(asset.escrowAddress);
 
   useEffect(() => {
     async function loadEscrow() {
@@ -138,7 +139,7 @@ export default function SellerAccept() {
             </div>
 
             <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm leading-6 text-slate-700">
-              <strong className="text-slate-900">Safety note:</strong> ProofPay never asks for your seed phrase or private key. This is an Arc Testnet deal using {escrow.assetSymbol || "USDC"}.
+              <strong className="text-slate-900">Safety note:</strong> ProofPay never asks for your seed phrase or private key. This is an {getNetworkConfig().chainName} deal using {escrow.assetSymbol || "USDC"}.
             </div>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -181,7 +182,7 @@ export default function SellerAccept() {
                 <SummaryRow label="Seller" value={escrow.sellerName} />
                 <SummaryRow label="Product / Service" value={escrow.productName} />
                 <SummaryRow label="Amount" value={escrow.amount ? `${escrow.amount} ${escrow.assetSymbol || "USDC"}` : "—"} />
-                <SummaryRow label="Network" value="Arc Testnet" />
+                <SummaryRow label="Network" value={getNetworkConfig().chainName} />
                 <SummaryRow label="Escrow ID" value={escrow.escrowId} />
               </div>
             </div>

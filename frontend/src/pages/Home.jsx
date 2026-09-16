@@ -9,6 +9,7 @@ import {
 } from "../services/wallet";
 import { getLiveContractStats } from "../services/proofpayContract";
 import api from "../services/api";
+import { getCurrentNetworkId, getNetworkConfig } from "../config/network";
 
 const EMPTY_COUNTS = { pending: 0, active: 0, completed: 0, cancelled: 0, disputes: 0 };
 const EMPTY_STATS = {
@@ -41,7 +42,7 @@ export default function Home() {
   const [networkStats, setNetworkStats] = useState(null);
   const [networkStatsError, setNetworkStatsError] = useState("");
   const [networkName, setNetworkName] = useState(
-    isCircleWallet ? "Arc Testnet" : "Checking network..."
+    isCircleWallet ? getNetworkConfig().chainName : "Checking network..."
   );
 
   useEffect(() => {
@@ -206,8 +207,8 @@ export default function Home() {
         signedAt: walletSession.signedAt,
       });
       setWalletAddress(walletSession.address);
-      setNetworkName("Arc Testnet");
-      setWalletStatus("Wallet connected to Arc Testnet.");
+      setNetworkName(getNetworkConfig().chainName);
+      setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}.`);
       setWalletMenuOpen(false);
     } catch (error) {
       const message = getWalletErrorMessage(error);
@@ -293,7 +294,7 @@ export default function Home() {
 
         {!mode && (
           <section className={`mx-auto mt-7 grid max-w-5xl gap-4 ${isDisputeAdmin ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
-            <WorkspaceCard icon="💳" title="My Wallet" description="View balances, receive, and send supported Arc Testnet tokens." onClick={() => navigate("/wallet")} />
+            <WorkspaceCard icon="💳" title="My Wallet" description={`View balances, receive, and send supported ${getNetworkConfig().chainName} tokens.`} onClick={() => navigate("/wallet")} />
             {isDisputeAdmin ? (
               <WorkspaceCard icon="🛡️" title="Admin Disputes" description="Review evidence from both sides and settle disputed escrows on-chain." onClick={() => navigate("/admin/disputes")} />
             ) : (
@@ -361,16 +362,18 @@ function LiveEscrowOverview({
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-200">Live ProofPay Network</p>
           <h2 className="mt-2 text-xl font-bold sm:text-2xl">Protected by smart-contract escrow</h2>
-          <p className="mt-2 max-w-2xl text-sm text-blue-100 sm:text-base">Live values read directly from the deployed Arc Testnet escrow contract.</p>
+          <p className="mt-2 max-w-2xl text-sm text-blue-100 sm:text-base">Live values read directly from the deployed {getNetworkConfig().chainName} escrow contract.</p>
         </div>
         <div className="relative grid w-56 grid-cols-1 gap-3">
           <button onClick={onWalletClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
             {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
           </button>
           <div className="flex h-12 w-56 items-center justify-center rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm">Network: {networkName}</div>
-          <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
-            Faucet
-          </button>
+          {getCurrentNetworkId() === "testnet" && (
+            <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
+              Faucet
+            </button>
+          )}
 
           {walletMenuOpen && (
             <div className="absolute right-0 top-12 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
@@ -403,6 +406,7 @@ function StatCard({ label, value }) {
 
 function getNetworkName(chainId) {
   const networks = {
+    "0x13b2": "Arc Mainnet",
     "0x4cef52": "Arc Testnet",
     "0xa4b1": "Arbitrum One",
     "0x66eee": "Arbitrum Sepolia",

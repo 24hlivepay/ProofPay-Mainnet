@@ -8,9 +8,17 @@ import {
 } from "../circle/circleConfig";
 import api from "../services/api";
 import { saveCircleAuthSession } from "../services/wallet";
+import { getNetworkConfig } from "../config/network";
 
 function findArcWallet(wallets = []) {
-  return wallets.find((wallet) => wallet.blockchain === "ARC-TESTNET");
+  const { circleBlockchain } = getNetworkConfig();
+  // No confirmed Circle blockchain id for this network yet (mainnet) — never
+  // matches, so the caller falls through to wallet creation, which the
+  // backend then refuses with a clear "not configured yet" error instead of
+  // silently creating a wallet on the wrong chain.
+  if (!circleBlockchain) return undefined;
+
+  return wallets.find((wallet) => wallet.blockchain === circleBlockchain);
 }
 
 function wait(milliseconds) {
@@ -77,12 +85,12 @@ export default function OtpVerification() {
       setStatus("Open the secure Circle window and enter the code from your email.");
 
       const auth = await verifyCircleEmailOtp(otpSession);
-      setStatus("Email verified. Loading your Arc Testnet wallet...");
+      setStatus(`Email verified. Loading your ${getNetworkConfig().chainName} wallet...`);
 
       let wallet = await loadWallet(auth.userToken);
 
       if (!wallet) {
-        setStatus("Creating your user-controlled Arc Testnet wallet...");
+        setStatus(`Creating your user-controlled ${getNetworkConfig().chainName} wallet...`);
         const initializeResponse = await api.post(
           "/circle/initialize-user",
           {},
@@ -99,12 +107,12 @@ export default function OtpVerification() {
           userToken: auth.userToken,
           encryptionKey: auth.encryptionKey,
         });
-        setStatus("Finalizing your Arc Testnet wallet...");
+        setStatus(`Finalizing your ${getNetworkConfig().chainName} wallet...`);
         wallet = await waitForWallet(auth.userToken);
       }
 
       if (!wallet?.address) {
-        throw new Error("Your Arc Testnet wallet was not available after setup.");
+        throw new Error(`Your ${getNetworkConfig().chainName} wallet was not available after setup.`);
       }
 
       saveWalletSession(wallet, auth);

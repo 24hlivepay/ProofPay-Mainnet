@@ -1,13 +1,8 @@
 import { Contract, formatUnits, Interface, JsonRpcProvider, parseUnits } from "ethers";
 import { connectWallet } from "./wallet";
 import { executeCircleContract } from "./circleTransactions";
-import { ESCROW_ASSETS, getEscrowAsset } from "../config/escrowAssets";
-
-export const PROOFPAY_ESCROW_ADDRESS =
-  "0xCd0f43E573899809ff96C560439570A760698C9a";
-
-export const ARC_TESTNET_USDC_ADDRESS =
-  "0x3600000000000000000000000000000000000000";
+import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
+import { getNetworkConfig } from "../config/network";
 
 // Arc's RPC can fail during gas estimation for the native-USDC ERC-20
 // precompile even though the signed transaction itself is valid. Supplying
@@ -18,8 +13,6 @@ const ARC_ESCROW_GAS_LIMIT = 500_000n;
 const ARC_STATUS_UPDATE_GAS_LIMIT = 250_000n;
 const USDC_DECIMALS = 6;
 const NETWORK_FEE_RESERVE = parseUnits("0.01", USDC_DECIMALS);
-const ARC_TESTNET_RPC_URL = "https://rpc.testnet.arc.network";
-const PROOFPAY_DEPLOYMENT_BLOCK = 53_590_676;
 const ARC_LOG_BLOCK_WINDOW = 9_000;
 
 const ESCROW_ABI = [
@@ -104,7 +97,7 @@ function readableError(error) {
     normalizedMessage.includes("wrong network") ||
     normalizedMessage.includes("chain")
   ) {
-    return "Your wallet is on the wrong network. Open MetaMask, switch to Arc Testnet, then try again.";
+    return `Your wallet is on the wrong network. Open MetaMask, switch to ${getNetworkConfig().chainName}, then try again.`;
   }
 
   if (
@@ -112,7 +105,7 @@ function readableError(error) {
     normalizedMessage.includes("missing revert data") ||
     normalizedMessage.includes("call exception")
   ) {
-    return "MetaMask could not prepare this payment. Check that the buyer wallet is selected, it is on Arc Testnet, and it has a small extra USDC balance for the network fee. No funds were moved.";
+    return `MetaMask could not prepare this payment. Check that the buyer wallet is selected, it is on ${getNetworkConfig().chainName}, and it has a small extra USDC balance for the network fee. No funds were moved.`;
   }
 
   if (
@@ -120,7 +113,7 @@ function readableError(error) {
     message.startsWith("Buyer wallet has") ||
     message.startsWith("Your payment has not started") ||
     message.startsWith("Unable to read buyer USDC balance") ||
-    message.startsWith("Arc Testnet could not read") ||
+    message.startsWith("Could not read the buyer USDC balance") ||
     message.startsWith("USDC approval failed") ||
     message.startsWith("USDC lock transaction failed") ||
     message.startsWith("Wallet connection failed") ||
@@ -137,7 +130,7 @@ function readableError(error) {
   }
 
   console.error("ProofPay transaction error:", error);
-  return `We could not complete this payment. No funds were moved. Please reopen ${walletName}, confirm the buyer wallet and Arc Testnet, then try again.`;
+  return `We could not complete this payment. No funds were moved. Please reopen ${walletName}, confirm the buyer wallet and ${getNetworkConfig().chainName}, then try again.`;
 }
 
 async function getContracts(assetSymbol = "USDC") {
@@ -172,8 +165,8 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function readUsdcBalance(address, connectedUsdc, tokenAddress = ARC_TESTNET_USDC_ADDRESS) {
-  const publicProvider = new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+async function readUsdcBalance(address, connectedUsdc, tokenAddress = getEscrowAsset("USDC").tokenAddress) {
+  const publicProvider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
   const publicUsdc = new Contract(
     tokenAddress,
     USDC_ABI,
@@ -194,7 +187,7 @@ async function readUsdcBalance(address, connectedUsdc, tokenAddress = ARC_TESTNE
   }
 
   throw new Error(
-    "Arc Testnet could not read the buyer USDC balance after several attempts. Please wait a moment and try again.",
+    "Could not read the buyer USDC balance after several attempts. Please wait a moment and try again.",
     { cause: lastError }
   );
 }
@@ -202,9 +195,9 @@ async function readUsdcBalance(address, connectedUsdc, tokenAddress = ARC_TESTNE
 async function readEscrowWithRetry(
   escrowId,
   connectedEscrow,
-  escrowAddress = PROOFPAY_ESCROW_ADDRESS
+  escrowAddress = getEscrowAsset("USDC").escrowAddress
 ) {
-  const publicProvider = new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+  const publicProvider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
   const publicEscrow = new Contract(
     escrowAddress,
     ESCROW_ABI,
@@ -267,7 +260,7 @@ async function recoverExistingEscrow({
   provider: connectedProvider,
 }) {
   const provider =
-    connectedProvider || new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+    connectedProvider || new JsonRpcProvider(getNetworkConfig().rpcUrl);
   const escrow = new Contract(asset.escrowAddress, ESCROW_ABI, provider);
   const existing = await readEscrowWithRetry(
     escrowId,
@@ -299,11 +292,11 @@ async function recoverExistingEscrow({
 
   for (
     let toBlock = latestBlock;
-    toBlock >= PROOFPAY_DEPLOYMENT_BLOCK;
+    toBlock >= asset.deploymentBlock;
     toBlock -= ARC_LOG_BLOCK_WINDOW
   ) {
     const fromBlock = Math.max(
-      PROOFPAY_DEPLOYMENT_BLOCK,
+      asset.deploymentBlock,
       toBlock - ARC_LOG_BLOCK_WINDOW + 1
     );
     const logs = await provider.getLogs({
@@ -404,7 +397,7 @@ export async function fundEscrow({ escrowId, sellerAddress, amount, assetSymbol 
         details: [
           `Escrow ID: ${escrowId}`,
           `Seller: ${sellerAddress}`,
-          "Network: Arc Testnet",
+          `Network: ${getNetworkConfig().chainName}`,
           "Access: Exact amount only",
           "Funds movement: None in this step",
         ],
@@ -430,7 +423,7 @@ export async function fundEscrow({ escrowId, sellerAddress, amount, assetSymbol 
         details: [
           `Escrow ID: ${escrowId}`,
           `Seller: ${sellerAddress}`,
-          "Network: Arc Testnet",
+          `Network: ${getNetworkConfig().chainName}`,
           "Funds destination: ProofPay Escrow contract",
           "Protection: Release after delivery",
         ],
@@ -517,7 +510,7 @@ export async function fundEscrow({ escrowId, sellerAddress, amount, assetSymbol 
 
 async function readOnChainEscrowStatus(escrowId, asset) {
   try {
-    const provider = new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+    const provider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
     const publicEscrow = new Contract(asset.escrowAddress, ESCROW_ABI, provider);
     const onChainEscrow = await readEscrowWithRetry(escrowId, publicEscrow, asset.escrowAddress);
     return Number(onChainEscrow.status);
@@ -559,7 +552,7 @@ export async function confirmDeliveryOnChain(escrowId, assetSymbol = "USDC") {
         action: "Confirm delivery status",
         details: [
           `Escrow ID: ${escrowId}`,
-          "Network: Arc Testnet",
+          `Network: ${getNetworkConfig().chainName}`,
           "Action: Mark order as delivered",
           `Locked ${asset.symbol}: Not released`,
           "Funds movement: None",
@@ -596,7 +589,7 @@ export async function releaseFundsOnChain(
   const asset = getEscrowAsset(assetSymbol);
 
   if (isCircleWallet()) {
-    const provider = new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+    const provider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
     const readOnlyEscrow = new Contract(
       asset.escrowAddress,
       ESCROW_ABI,
@@ -660,7 +653,7 @@ export async function releaseFundsOnChain(
         details: [
           `Escrow ID: ${escrowId}`,
           `Recipient: ${sellerAddress}`,
-          "Network: Arc Testnet",
+          `Network: ${getNetworkConfig().chainName}`,
           "Status: Delivery confirmed",
           "Funds source: ProofPay Escrow contract",
           "Warning: This action cannot be reversed",
@@ -791,12 +784,13 @@ export async function getEscrowOnChain(escrowId, assetSymbol = "USDC") {
   }
 }
 
-// These figures are read directly from Arc Testnet. They do not use the
-// temporary JSON backend, so the dashboard reflects the deployed contract.
+// These figures are read directly from the current Arc network. They do
+// not use the temporary JSON backend, so the dashboard reflects the
+// deployed contract.
 export async function getLiveContractStats() {
-  const provider = new JsonRpcProvider(ARC_TESTNET_RPC_URL);
+  const provider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
   const balances = await Promise.all(
-    ESCROW_ASSETS.map(async (asset) => {
+    getEscrowAssets().map(async (asset) => {
       const token = new Contract(asset.tokenAddress, USDC_ABI, provider);
       const balance = await token.balanceOf(asset.escrowAddress);
       return [asset.symbol, formatUnits(balance, asset.decimals)];

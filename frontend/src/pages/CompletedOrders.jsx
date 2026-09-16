@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
+import { getExplorerTxUrl } from "../config/network";
 
 export default function CompletedOrders() {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ function OrderCard({ order, seller, onViewDispute }) {
 }
 
 function Detail({ label, value }) { return <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm text-slate-500">{label}</p><p className="mt-1 font-semibold text-slate-900">{value || "—"}</p></div>; }
-function ArcscanLink({ label, hash }) { return <a href={`https://testnet.arcscan.app/tx/${hash}`} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-100">{label} ↗</a>; }
+function ArcscanLink({ label, hash }) { return <a href={getExplorerTxUrl(hash)} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-100">{label} ↗</a>; }
 function EmptyState({ seller }) { return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><div className="text-4xl">✅</div><h2 className="mt-4 text-xl font-bold text-slate-900">{seller ? "No payments received" : "No completed purchases"}</h2><p className="mt-2 text-sm text-slate-600">Released escrow payments will appear here.</p></div>; }
 
 function formatDate(timestamp) {
