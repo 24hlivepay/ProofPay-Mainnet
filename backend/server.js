@@ -40,10 +40,21 @@ app.use(express.json({ limit: "12mb" }));
 
 const CIRCLE_API_URL = "https://api.circle.com";
 
-const circleHeaders = {
-  Authorization: `Bearer ${process.env.CIRCLE_API_KEY}`,
-  "Content-Type": "application/json",
+// Circle API key, per network — each Arc network has its own Circle
+// account/key, so a single global key would silently use the wrong one for
+// whichever network it wasn't issued for. CIRCLE_API_KEY keeps its existing
+// name for testnet (already set in Vercel); CIRCLE_API_KEY_MAINNET is new.
+const CIRCLE_API_KEY_BY_NETWORK = {
+  testnet: process.env.CIRCLE_API_KEY,
+  mainnet: process.env.CIRCLE_API_KEY_MAINNET,
 };
+
+function getCircleHeaders(network) {
+  return {
+    Authorization: `Bearer ${CIRCLE_API_KEY_BY_NETWORK[network] || ""}`,
+    "Content-Type": "application/json",
+  };
+}
 
 // Arc network the frontend is currently pointed at (see MAINNET_TODO.md
 // step 4). frontend/src/services/api.js sends this on every request.
@@ -374,7 +385,7 @@ app.post("/api/circle/request-email-otp", async (req, res) => {
         email,
       },
       {
-        headers: circleHeaders,
+        headers: getCircleHeaders(getRequestNetwork(req)),
       }
     );
 
@@ -416,7 +427,7 @@ app.post("/api/circle/initialize-user", async (req, res) => {
       },
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
       }
@@ -455,7 +466,7 @@ app.get("/api/circle/wallets", async (req, res) => {
       `${CIRCLE_API_URL}/v1/w3s/wallets`,
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
         params: {
@@ -596,7 +607,7 @@ app.post("/api/circle/contract-execution", async (req, res) => {
       },
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
       }
@@ -656,7 +667,7 @@ app.post("/api/circle/transfer", async (req, res) => {
       },
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
       }
@@ -690,7 +701,7 @@ app.get("/api/circle/wallets/:walletId/balances", async (req, res) => {
       )}/balances`,
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
         params: {
@@ -732,7 +743,7 @@ app.get("/api/circle/transactions", async (req, res) => {
       `${CIRCLE_API_URL}/v1/w3s/transactions`,
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
         params: {
@@ -770,7 +781,7 @@ app.get("/api/circle/challenges/:challengeId", async (req, res) => {
       )}`,
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
       }
@@ -798,7 +809,7 @@ app.get("/api/circle/transactions/:transactionId", async (req, res) => {
       )}`,
       {
         headers: {
-          ...circleHeaders,
+          ...getCircleHeaders(getRequestNetwork(req)),
           "X-User-Token": userToken,
         },
       }

@@ -1,9 +1,13 @@
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
+import { getNetworkConfig } from "../config/network";
 
-const circleAppId = import.meta.env.VITE_CIRCLE_APP_ID;
+// Re-read on every load (the network toggle in Navbar.jsx reloads the page
+// on switch, so this always reflects the currently selected network — see
+// config/network.js for why this isn't just a single VITE_CIRCLE_APP_ID).
+const circleAppId = getNetworkConfig().circleAppId;
 
 if (!circleAppId) {
-  console.warn("VITE_CIRCLE_APP_ID is not configured.");
+  console.warn(`Circle App ID is not configured for ${getNetworkConfig().chainName}.`);
 }
 
 export const circleSdk = new W3SSdk({

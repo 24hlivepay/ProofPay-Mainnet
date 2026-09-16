@@ -17,6 +17,11 @@ export const NETWORKS = {
     // blockchains" table (mainnet / testnet chain code column: "ARC" /
     // "ARC-TESTNET") — not a guess. See MAINNET_TODO.md step 5.
     circleBlockchain: "ARC",
+    // Vite env vars are baked in at build time, but which network is
+    // "current" is a runtime choice (the toggle in Navbar.jsx). Both
+    // networks' App IDs are included in the same build; this object picks
+    // between them at runtime instead of the build only ever knowing one.
+    circleAppId: import.meta.env.VITE_CIRCLE_APP_ID_MAINNET || null,
   },
   testnet: {
     id: "testnet",
@@ -27,6 +32,12 @@ export const NETWORKS = {
     explorerBase: "https://testnet.arcscan.app",
     nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
     circleBlockchain: "ARC-TESTNET",
+    // Falls back to the original VITE_CIRCLE_APP_ID name so the existing
+    // Vercel config (set before mainnet support existed) keeps working.
+    circleAppId:
+      import.meta.env.VITE_CIRCLE_APP_ID_TESTNET ||
+      import.meta.env.VITE_CIRCLE_APP_ID ||
+      null,
   },
 };
 
