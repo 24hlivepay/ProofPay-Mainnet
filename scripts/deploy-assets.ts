@@ -9,7 +9,7 @@ const ARC_MAINNET_EURC = "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1";
 // It only exists in Circle's docs as a testnet asset. Deploying a CIRBTC escrow here
 // is disabled until Circle publishes a mainnet cirBTC address — see the check below.
 const ARC_MAINNET_CIRBTC = "";
-const EXPECTED_DEPLOYER = "0xd979e5d9eeb1126c75a7b215ee0f79895fe091ac"; // TODO: confirm this is the intended Mainnet deployer before running.
+const EXPECTED_DEPLOYER = "0xd979e5d9eeb1126c75a7b215ee0f79895fe091ac"; // Same deployer wallet as testnet, reused intentionally for Mainnet.
 
 type Artifact = {
   abi: InterfaceAbi;
