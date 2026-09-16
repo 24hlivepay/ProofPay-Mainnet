@@ -3,9 +3,13 @@ import path from "node:path";
 import { ContractFactory, JsonRpcProvider, Wallet } from "ethers";
 import type { InterfaceAbi } from "ethers";
 
-const ARC_TESTNET_EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
-const ARC_TESTNET_CIRBTC = "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF";
-const EXPECTED_DEPLOYER = "0xd979e5d9eeb1126c75a7b215ee0f79895fe091ac";
+// Verified against Circle's official Arc Mainnet docs (docs.arc.io/arc/references/contract-addresses).
+const ARC_MAINNET_EURC = "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1";
+// cirBTC has no documented Arc Mainnet contract as of the mainnet launch (Sept 2026).
+// It only exists in Circle's docs as a testnet asset. Deploying a CIRBTC escrow here
+// is disabled until Circle publishes a mainnet cirBTC address — see the check below.
+const ARC_MAINNET_CIRBTC = "";
+const EXPECTED_DEPLOYER = "0xd979e5d9eeb1126c75a7b215ee0f79895fe091ac"; // TODO: confirm this is the intended Mainnet deployer before running.
 
 type Artifact = {
   abi: InterfaceAbi;
@@ -81,10 +85,19 @@ async function main() {
   const requestedAsset = (process.env.DEPLOY_ASSET || "ALL").toUpperCase();
 
   if (requestedAsset === "ALL" || requestedAsset === "EURC") {
-    await deployAssetEscrow(factory, "EURC", ARC_TESTNET_EURC);
+    await deployAssetEscrow(factory, "EURC", ARC_MAINNET_EURC);
   }
-  if (requestedAsset === "ALL" || requestedAsset === "CIRBTC") {
-    await deployAssetEscrow(factory, "CIRBTC", ARC_TESTNET_CIRBTC);
+  if (requestedAsset === "CIRBTC" || requestedAsset === "ALL") {
+    if (!ARC_MAINNET_CIRBTC) {
+      if (requestedAsset === "CIRBTC") {
+        throw new Error(
+          "No Arc Mainnet cirBTC contract is published yet. Set ARC_MAINNET_CIRBTC once Circle documents one."
+        );
+      }
+      console.log("Skipping CIRBTC: no Arc Mainnet cirBTC contract published yet.");
+    } else {
+      await deployAssetEscrow(factory, "CIRBTC", ARC_MAINNET_CIRBTC);
+    }
   }
 
   if (!["ALL", "EURC", "CIRBTC"].includes(requestedAsset)) {
