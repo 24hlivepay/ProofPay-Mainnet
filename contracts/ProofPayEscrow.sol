@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
+
+// NOTE: This is the Hardhat-toolchain copy of the escrow contract
+// (compiled/deployed via scripts/deploy.ts). foundry/src/ProofPayEscrow.sol
+// is the copy the Foundry scripts (foundry/script/*.s.sol) deploy from —
+// the two are kept functionally in sync by hand. Before adding a feature,
+// decide which toolchain is canonical for mainnet and update both, or
+// retire one deployment path so they cannot drift apart silently.
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract ProofPayEscrow is Ownable, ReentrancyGuard {
+contract ProofPayEscrow is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     enum Status {
@@ -49,11 +57,22 @@ contract ProofPayEscrow is Ownable, ReentrancyGuard {
         usdc = IERC20(usdcAddress);
     }
 
+    // Emergency stop for new escrow creation. Existing escrows can still be
+    // delivered, released, refunded, or dispute-resolved while paused, so
+    // funds already locked in the contract can never get stuck.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     function createEscrow(
         string calldata escrowId,
         address seller,
         uint256 amount
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         require(bytes(escrowId).length > 0, "Escrow ID is required");
         require(escrows[escrowId].buyer == address(0), "Escrow already exists");
         require(seller != address(0), "Seller address is required");

@@ -166,4 +166,50 @@ contract ProofPayEscrowTest is Test {
         vm.expectRevert("Invalid buyer amount");
         escrow.resolveDispute(ESCROW_ID, AMOUNT + 1);
     }
+
+    function testOwnerCanPauseAndUnpause() public {
+        assertEq(escrow.paused(), false);
+        escrow.pause();
+        assertEq(escrow.paused(), true);
+        escrow.unpause();
+        assertEq(escrow.paused(), false);
+    }
+
+    function testNonOwnerCannotPause() public {
+        vm.expectRevert("Only owner");
+        vm.prank(outsider);
+        escrow.pause();
+    }
+
+    function testCannotCreateEscrowWhilePaused() public {
+        escrow.pause();
+        vm.expectRevert("Contract is paused");
+        vm.prank(buyer);
+        escrow.createEscrow(ESCROW_ID, seller, AMOUNT);
+    }
+
+    function testPauseDoesNotBlockExistingEscrowLifecycle() public {
+        _createEscrow();
+        escrow.pause();
+
+        vm.prank(seller);
+        escrow.confirmDelivery(ESCROW_ID);
+        vm.prank(buyer);
+        escrow.releaseFunds(ESCROW_ID);
+
+        (, , , ProofPayEscrow.Status status) = escrow.getEscrow(ESCROW_ID);
+        assertEq(uint256(status), uint256(ProofPayEscrow.Status.Released));
+        assertEq(token.balanceOf(seller), AMOUNT);
+    }
+
+    function testCannotDoublePause() public {
+        escrow.pause();
+        vm.expectRevert("Already paused");
+        escrow.pause();
+    }
+
+    function testCannotUnpauseWhenNotPaused() public {
+        vm.expectRevert("Not paused");
+        escrow.unpause();
+    }
 }

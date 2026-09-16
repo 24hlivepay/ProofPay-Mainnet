@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
+
+// NOTE: This is the canonical, deployed ProofPay escrow contract.
+// foundry/script/*.s.sol (used for the USDC/EURC/cirBTC deployments referenced
+// in the README) import this file. contracts/ProofPayEscrow.sol is a second,
+// OpenZeppelin-based implementation kept for the Hardhat toolchain
+// (scripts/deploy.ts) — it is functionally mirrored to match this file, but
+// if you only ever deploy through Foundry, this is the source of truth.
+// Keep both in sync, or retire one path, before adding new features.
 
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -26,6 +34,7 @@ contract ProofPayEscrow {
     IERC20 public immutable usdc;
     address public immutable owner;
     uint256 private locked = 1;
+    bool public paused;
 
     mapping(string => Escrow) public escrows;
 
@@ -35,6 +44,8 @@ contract ProofPayEscrow {
     event FundsRefunded(string indexed escrowId, address indexed buyer, uint256 amount);
     event DisputeOpened(string indexed escrowId, address indexed openedBy);
     event DisputeResolved(string indexed escrowId, uint256 buyerAmount, uint256 sellerAmount);
+    event Paused(address indexed account);
+    event Unpaused(address indexed account);
 
     modifier nonReentrant() {
         require(locked == 1, "Reentrant call");
@@ -48,13 +59,40 @@ contract ProofPayEscrow {
         _;
     }
 
+    // Blocks new deposits only. Delivery confirmation, fund release, refunds,
+    // and dispute resolution all keep working while paused, so a pause can
+    // never trap funds that are already locked in an escrow.
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
     constructor(address usdcAddress) {
         require(usdcAddress != address(0), "USDC address is required");
         usdc = IERC20(usdcAddress);
         owner = msg.sender;
     }
 
-    function createEscrow(string calldata escrowId, address seller, uint256 amount) external nonReentrant {
+    // Emergency stop for new escrow creation. Does not affect existing
+    // escrows — buyers/sellers can still confirm delivery, release, refund,
+    // or resolve disputes on escrows created before the pause.
+    function pause() external onlyOwner {
+        require(!paused, "Already paused");
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external onlyOwner {
+        require(paused, "Not paused");
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    function createEscrow(string calldata escrowId, address seller, uint256 amount)
+        external
+        nonReentrant
+        whenNotPaused
+    {
         require(bytes(escrowId).length > 0, "Escrow ID is required");
         require(escrows[escrowId].buyer == address(0), "Escrow already exists");
         require(seller != address(0) && seller != msg.sender, "Invalid seller");
