@@ -63,13 +63,14 @@ function escrowNetwork(escrow) {
   return KNOWN_NETWORKS.has(escrow?.network) ? escrow.network : "testnet";
 }
 
-// Circle Wallets API blockchain enum, per network. Circle's docs only
-// document "ARC-TESTNET" as of the mainnet launch — CIRCLE_MAINNET_BLOCKCHAIN
-// is deliberately unset until that value is confirmed in Circle's Developer
-// Console/docs (see MAINNET_TODO.md step 5). Do not hardcode a guess here.
+// Circle Wallets API blockchain enum, per network. Confirmed 2026-09-16
+// against developers.circle.com/wallets docs' "Supported blockchains" table
+// (mainnet / testnet chain code column: "ARC" / "ARC-TESTNET") — not a
+// guess. CIRCLE_MAINNET_BLOCKCHAIN can still override it if Circle ever
+// changes the code. See MAINNET_TODO.md step 5.
 const CIRCLE_BLOCKCHAIN_BY_NETWORK = {
   testnet: "ARC-TESTNET",
-  mainnet: process.env.CIRCLE_MAINNET_BLOCKCHAIN || null,
+  mainnet: process.env.CIRCLE_MAINNET_BLOCKCHAIN || "ARC",
 };
 
 function requireCircleBlockchain(network, res) {

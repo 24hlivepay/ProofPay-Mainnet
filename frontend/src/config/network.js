@@ -12,12 +12,11 @@ export const NETWORKS = {
     rpcUrl: "https://rpc.mainnet.arc.io",
     explorerBase: "https://explorer.arc.io",
     nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-    // Circle Wallets API blockchain enum for this network. Not set for
-    // mainnet: Circle's docs only document "ARC-TESTNET" as of the 2026-09-16
-    // launch, so this is left unconfirmed rather than guessed (see
-    // MAINNET_TODO.md step 5). The backend refuses Circle-wallet requests
-    // for mainnet the same way, for the same reason.
-    circleBlockchain: null,
+    // Circle Wallets API blockchain enum for this network. Confirmed
+    // 2026-09-16 against developers.circle.com/wallets docs' "Supported
+    // blockchains" table (mainnet / testnet chain code column: "ARC" /
+    // "ARC-TESTNET") — not a guess. See MAINNET_TODO.md step 5.
+    circleBlockchain: "ARC",
   },
   testnet: {
     id: "testnet",
