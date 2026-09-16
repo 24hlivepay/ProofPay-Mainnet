@@ -1,0 +1,24 @@
+{
+  "name": "proofpay-backend",
+  "version": "1.0.0",
+  "description": "ProofPay Backend",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@circle-fin/user-controlled-wallets": "^10.8.0",
+    "@vercel/blob": "^2.8.0",
+    "axios": "^1.18.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+    "dotenv": "^17.4.2",
+    "hardhat": "^3.11.0"
+  }
+}

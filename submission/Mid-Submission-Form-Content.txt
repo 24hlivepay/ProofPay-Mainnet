@@ -1,0 +1,34 @@
+PROOFPAY — MID-SUBMISSION CHECKPOINT
+
+Project description
+ProofPay is a live P2P USDC escrow MVP on Arc Testnet. It reduces counterparty risk by letting a buyer create a deal, the seller review and accept it with a connected wallet, and the buyer lock test USDC in a smart contract. After the seller confirms delivery, the buyer releases the funds. The public MVP includes MetaMask and Rabby support, persistent order records, pending/active/completed/cancelled states, and Arcscan transaction links. We have completed end-to-end tests across three wallets and are now expanding public community testing. Our next major milestone is Circle User-Controlled Wallets integration to make onboarding more familiar and accessible.
+
+Short description
+Live P2P USDC escrow on Arc Testnet with buyer-controlled fund release and seller-verified delivery.
+
+Code link
+https://github.com/24hlivepay/ProofPay
+
+Live app
+https://proofpay.online
+
+Track
+DeFi Track
+
+Do not select Agentic Economy Track at this checkpoint unless autonomous agent functionality is implemented before submission.
+
+Presentation
+Upload ProofPay-Mid-Submission.pptx to Google Slides, then set:
+Share → General access → Anyone with the link → Viewer
+
+After that, paste the Google Slides URL into “Link to Presentation”.
+
+Project image
+Upload ProofPay-Mid-Submission-Cover.png
+
+Before submitting
+1. Confirm the GitHub repository is public or accessible to the judges.
+2. Open the presentation link in an incognito/private browser window.
+3. Open https://proofpay.online in an incognito/private browser window.
+4. Select DeFi Track.
+5. Submit before Monday, July 27, 2026 at 4:59 PM Asia/Karachi.

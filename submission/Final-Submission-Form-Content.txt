@@ -1,0 +1,49 @@
+PROOFPAY — FINAL SUBMISSION
+
+Project name
+ProofPay
+
+One-line description
+Multi-asset P2P escrow on Arc Testnet with verifiable delivery and buyer-controlled release.
+
+Project description
+ProofPay reduces counterparty risk in peer-to-peer online deals. A buyer creates an escrow, shares a private review link, and locks a selected testnet asset in a smart contract after the seller accepts. The seller confirms delivery on-chain, and the buyer releases payment. ProofPay supports USDC, EURC, and cirBTC escrow contracts on Arc Testnet; Circle email wallets, MetaMask, and Rabby; persistent Neon Postgres order records; buyer and seller dashboards; and Arcscan transaction evidence. The MVP has been exercised through developer-led and ongoing public testing. Automated tests cover the contract happy path, refunds, dispute safeguards, permissions, and invalid inputs. A complete user-facing dispute-resolution workflow is planned for the next version.
+
+Short description
+Testnet escrow for safer P2P deals using USDC, EURC, or cirBTC.
+
+Code
+https://github.com/24hlivepay/ProofPay
+
+Live app
+https://proofpay.online
+
+Primary contract
+https://testnet.arcscan.app/address/0xCd0f43E573899809ff96C560439570A760698C9a
+
+Deployment transaction
+https://testnet.arcscan.app/tx/0x79e8933c8df6707c0f5a91fc3f0e162f270100eb4514994d6d8536901dfe3f73
+
+Track
+DeFi Track
+
+What is complete
+- Buyer-to-seller escrow lifecycle on Arc Testnet
+- USDC, EURC, and cirBTC selection with dedicated escrow contracts
+- Circle email wallet, MetaMask, and Rabby onboarding
+- Persistent order metadata with buyer/seller status views
+- Contract-level refund and dispute safeguards (the complete user-facing dispute workflow is planned for the next version)
+- Arcscan links for verifiable lock and release transactions
+- Automated contract tests and reproducible validation command
+
+Public testing statement
+The live testnet MVP is under public testing and has also been tested directly by the team. It uses testnet assets only and has not received an independent security audit.
+
+Final checklist
+1. Run `npm run validate` and save the passing output.
+2. Open the live app and `/api/health` in an incognito window.
+3. Complete one final two-wallet escrow and save both Arcscan links.
+4. Confirm the GitHub repository and presentation link are publicly viewable.
+5. Upload `ProofPay-Final-Submission.pptx` to Google Slides and set Anyone with the link → Viewer.
+6. Use a recent live-product screenshot as the project image.
+7. Recheck the official deadline and exact form fields before submitting.

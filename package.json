@@ -1,0 +1,27 @@
+{
+  "name": "proofpay",
+  "version": "1.0.0",
+  "description": "Secure multi-asset peer-to-peer escrow on Arc Testnet",
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
+    "test": "npm run test:contracts",
+    "test:contracts": "forge test --root foundry",
+    "validate": "npm run lint && npm run build && npm run test:contracts && npm run check:backend",
+    "check:backend": "node --check backend/server.js && node --check backend/services/circleService.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "dotenv": "^17.4.2",
+    "hardhat": "^3.10.0",
+    "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
+    "ethers": "^6.17.0"
+  }
+}

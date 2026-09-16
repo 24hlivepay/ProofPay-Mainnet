@@ -1,0 +1,58 @@
+# Node modules
+/node_modules
+
+# Compilation output
+/dist
+
+# pnpm deploy output
+/bundle
+
+# Hardhat Build Artifacts
+/artifacts
+
+# Hardhat compilation (v2) support directory
+/cache
+
+# Typechain output
+/types
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Never commit secrets from nested applications either.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Nested build dependencies and generated files
+**/node_modules/
+**/dist/
+**/cache/
+**/out/
+/.tmp/
+
+# Local runtime data and one-off editor backups
+/backend/data/escrows.json
+/backend/data/wallet-connections.json
+*.backup
+**/.DS_Store
+
+# Local duplicate copies kept outside version history
+/contracts/ProofPayEscrow 2.sol
+/foundry/src/ProofPayEscrow 2.sol
+/foundry/script/ProofPayEscrow.s 2.sol
+/frontend/src/services/wallet 2.js
+/scripts/deploy 2.ts
+
+# Hardhat coverage reports
+/coverage
+
+# Gas snapshot files
+/.gas-snapshot
+
+# Snapshot cheatcodes output
+/snapshots
+.vercel
+.env*
