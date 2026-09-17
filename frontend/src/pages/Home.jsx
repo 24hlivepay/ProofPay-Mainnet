@@ -355,13 +355,18 @@ function LiveEscrowOverview({
     maximumFractionDigits: symbol === "cirBTC" ? 8 : 6,
   });
 
+  const isTestnetHero = getCurrentNetworkId() === "testnet";
+  const heroGradient = isTestnetHero
+    ? "bg-gradient-to-br from-amber-600 via-amber-500 to-orange-600"
+    : "bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700";
+
   return (
-    <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-5 text-white shadow-lg sm:p-6">
+    <section className={`overflow-hidden rounded-2xl ${heroGradient} p-5 text-white shadow-lg sm:p-6`}>
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-200">Live ProofPay Network</p>
+          <p className={`text-sm font-bold uppercase tracking-[0.18em] ${isTestnetHero ? "text-amber-100" : "text-blue-200"}`}>Live ProofPay Network</p>
           <h2 className="mt-2 text-xl font-bold sm:text-2xl">Protected by smart-contract escrow</h2>
-          <p className="mt-2 max-w-2xl text-sm text-blue-100 sm:text-base">Live values read directly from the deployed {getNetworkConfig().chainName} escrow contract.</p>
+          <p className={`mt-2 max-w-2xl text-sm sm:text-base ${isTestnetHero ? "text-amber-100" : "text-blue-100"}`}>Live values read directly from the deployed {getNetworkConfig().chainName} escrow contract.</p>
         </div>
         {getCurrentNetworkId() === "testnet" && (
           <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
@@ -378,7 +383,7 @@ function LiveEscrowOverview({
         )}
         <StatCard label="Executed Escrows" value={hasStats ? stats.executedEscrows ?? "Checking…" : "Loading…"} />
       </div>
-      {statsError && <p className="mt-5 text-sm font-medium text-blue-100">{statsError}</p>}
+      {statsError && <p className={`mt-5 text-sm font-medium ${isTestnetHero ? "text-amber-100" : "text-blue-100"}`}>{statsError}</p>}
     </section>
   );
 }
@@ -386,7 +391,7 @@ function LiveEscrowOverview({
 function StatCard({ label, value }) {
   return (
     <div className="rounded-xl border border-white/20 bg-white/10 p-4 text-white">
-      <p className="text-sm font-medium text-blue-100">{label}</p>
+      <p className={`text-sm font-medium ${getCurrentNetworkId() === "testnet" ? "text-amber-100" : "text-blue-100"}`}>{label}</p>
       <p className="mt-1.5 text-xl font-bold">{value}</p>
     </div>
   );

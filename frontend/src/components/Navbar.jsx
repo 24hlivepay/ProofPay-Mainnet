@@ -35,6 +35,15 @@ export default function Navbar({ walletSlot }) {
 
   return (
     <header className="border-b border-slate-100 bg-white">
+      <div
+        className={`py-1.5 text-center text-xs font-semibold ${
+          isMainnet ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"
+        }`}
+      >
+        {isMainnet
+          ? "Arc Mainnet — live, real funds move here"
+          : "Arc Testnet — sandbox, nothing here moves real money"}
+      </div>
       <nav
         aria-label="Main navigation"
         className="flex items-center justify-between px-5 py-4 sm:px-6"
