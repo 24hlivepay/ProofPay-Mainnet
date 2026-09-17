@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { releaseFundsOnChain } from "../services/proofpayContract";
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 export default function EscrowActive() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const location = useLocation();
   const { escrowData, setEscrowData } = useEscrow();
@@ -64,7 +66,7 @@ export default function EscrowActive() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">

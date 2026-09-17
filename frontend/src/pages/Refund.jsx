@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 
 export default function Refund() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
       <div className="w-full rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
 

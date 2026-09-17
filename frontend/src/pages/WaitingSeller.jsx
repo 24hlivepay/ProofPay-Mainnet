@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 
 import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
 
 export default function WaitingSeller() {
+  const { walletSlot } = useWalletBadge();
 
   const navigate = useNavigate();
 
@@ -142,7 +144,7 @@ export default function WaitingSeller() {
 
     <div className="min-h-screen bg-slate-100">
 
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
 
       <main className="mx-auto max-w-2xl px-5 py-7 sm:px-6">
 

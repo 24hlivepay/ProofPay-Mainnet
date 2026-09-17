@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import { sendCircleToken } from "../services/circleTransactions";
 import {
@@ -33,6 +34,7 @@ function getWalletTokens() {
 }
 
 export default function CircleWallet() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const location = useLocation();
   const session = getWalletSession();
@@ -317,7 +319,7 @@ export default function CircleWallet() {
   if (!address) {
     return (
       <div className="min-h-screen bg-slate-100">
-        <Navbar />
+        <Navbar walletSlot={walletSlot} />
         <main className="mx-auto max-w-xl px-5 py-12 text-center">
           <div className="rounded-2xl bg-white p-8 shadow-sm">
             <h1 className="text-2xl font-bold">Wallet connection required</h1>
@@ -338,7 +340,7 @@ export default function CircleWallet() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
         <button
           onClick={() => navigate("/dashboard")}

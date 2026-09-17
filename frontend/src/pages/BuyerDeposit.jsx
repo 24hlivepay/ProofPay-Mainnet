@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import api from "../services/api";
@@ -9,6 +10,7 @@ import { fundEscrow } from "../services/proofpayContract";
 import { connectWallet } from "../services/wallet";
 
 export default function BuyerDeposit() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const location = useLocation();
   const { escrowData, setEscrowData, updateEscrow } = useEscrow();
@@ -139,7 +141,7 @@ export default function BuyerDeposit() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
         <button onClick={() => navigate(backTo)} className="mb-8 font-semibold text-blue-600 hover:text-blue-700">
           {backLabel}

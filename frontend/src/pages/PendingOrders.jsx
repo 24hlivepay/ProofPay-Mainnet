@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { useEscrow } from "../context/EscrowContext";
@@ -8,6 +9,7 @@ import { useEscrow } from "../context/EscrowContext";
 const PENDING_EXPIRY_MS = 12 * 60 * 60 * 1000;
 
 export default function PendingOrders() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const location = useLocation();
   const { setEscrowData } = useEscrow();
@@ -113,7 +115,7 @@ export default function PendingOrders() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

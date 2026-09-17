@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
@@ -11,6 +12,7 @@ import {
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 export default function ActiveOrders() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const location = useLocation();
   const { setEscrowData } = useEscrow();
@@ -134,7 +136,7 @@ export default function ActiveOrders() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

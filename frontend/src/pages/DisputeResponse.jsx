@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import api, { API_BASE_URL } from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
@@ -18,6 +19,7 @@ function readFiles(files) {
 }
 
 export default function DisputeResponse() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const { state } = useLocation();
   const order = state?.order;
@@ -57,12 +59,12 @@ export default function DisputeResponse() {
     } finally { setSaving(false); }
   }
 
-  if (!order) return <div className="min-h-screen bg-slate-100"><Navbar /><main className="mx-auto max-w-xl p-8"><p className="rounded-xl bg-red-50 p-4 text-red-700">Open this screen from an active, disputed escrow.</p></main></div>;
+  if (!order) return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-xl p-8"><p className="rounded-xl bg-red-50 p-4 text-red-700">Open this screen from an active, disputed escrow.</p></main></div>;
 
   const canRespond = dispute && !isOpener && !alreadyResponded && !resolution;
   const title = canRespond ? "Respond to dispute" : "Dispute case";
 
-  return <div className="min-h-screen bg-slate-100"><Navbar /><main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
+  return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
     <button onClick={() => navigate(-1)} className="text-sm font-semibold text-blue-700">← Back to active orders</button>
     <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <h1 className="text-3xl font-bold text-slate-900">{title}</h1>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
@@ -8,6 +9,7 @@ import { confirmDeliveryOnChain } from "../services/proofpayContract";
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 export default function SellerVerification() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const { id } = useParams();
   const { escrowData, setEscrowData } = useEscrow();
@@ -112,7 +114,7 @@ export default function SellerVerification() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
         <button onClick={() => navigate(sellerBack.path, { state: sellerBack.state })} className="mb-8 font-semibold text-blue-600 hover:text-blue-700">
           ← {sellerBack.label}

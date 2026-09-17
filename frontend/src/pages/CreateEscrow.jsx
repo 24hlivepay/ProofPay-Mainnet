@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import { useEscrow } from "../context/EscrowContext";
@@ -32,6 +33,7 @@ function truncateAssetAmount(value, decimals) {
 }
 
 export default function CreateEscrow() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const { setEscrowData } = useEscrow();
   const [buyerName, setBuyerName] = useState("");
@@ -166,7 +168,7 @@ export default function CreateEscrow() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-2xl px-5 py-7 sm:px-6">
         <button onClick={() => navigate("/dashboard/buying")} className="mb-5 text-sm font-semibold text-blue-600">
           ← Back to Buying Escrows

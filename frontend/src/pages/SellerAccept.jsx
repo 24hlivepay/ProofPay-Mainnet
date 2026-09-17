@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
@@ -9,6 +10,7 @@ import { getEscrowAsset } from "../config/escrowAssets";
 import { getExplorerAddressUrl, getNetworkConfig } from "../config/network";
 
 export default function SellerAccept() {
+  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const { id } = useParams();
   const { escrowData, setEscrowData } = useEscrow();
@@ -92,7 +94,7 @@ export default function SellerAccept() {
   if (error && !escrowData?.escrowId) {
     return (
       <div className="min-h-screen bg-slate-100">
-        <Navbar />
+        <Navbar walletSlot={walletSlot} />
         <main className="mx-auto max-w-lg px-5 py-10 text-center sm:px-6">
           <div className="rounded-2xl border border-red-200 bg-white p-7 shadow-sm">
             <div className="text-4xl">⚠️</div>
@@ -109,7 +111,7 @@ export default function SellerAccept() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
         <button
           onClick={() => (reviewing ? setReviewing(false) : navigate("/dashboard/selling"))}
