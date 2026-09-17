@@ -51,7 +51,6 @@ export default function Navbar({ walletSlot }) {
         </button>
 
         <div className="flex items-center gap-3">
-        {walletSlot}
         <div className="relative" ref={menuRef}>
           <button
             type="button"
@@ -87,6 +86,7 @@ export default function Navbar({ walletSlot }) {
             </div>
           )}
         </div>
+        {walletSlot}
         </div>
       </nav>
     </header>
