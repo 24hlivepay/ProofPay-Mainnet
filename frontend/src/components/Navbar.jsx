@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getNetworkConfig, NETWORKS, setCurrentNetworkId } from "../config/network";
+import { getCurrentNetworkId, getNetworkConfig, NETWORKS, setCurrentNetworkId } from "../config/network";
 
-function performNetworkSwitch(nextId) {
+function switchToNetwork(nextId) {
   const isCircleWallet = localStorage.getItem("proofpay-wallet-type") === "circle";
 
   if (isCircleWallet) {
@@ -28,17 +28,8 @@ export default function Navbar() {
   const navigate = useNavigate();
   const network = getNetworkConfig();
   const isMainnet = network.id === "mainnet";
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const nextId = isMainnet ? "testnet" : "mainnet";
-  const nextName = NETWORKS[nextId].chainName;
-  const isCircleWallet = localStorage.getItem("proofpay-wallet-type") === "circle";
-  const reloginNote = isCircleWallet
-    ? " Circle issues a separate wallet per network, so you'll need to sign in again for it."
-    : "";
-  const warning = nextId === "mainnet"
-    ? `Deposits and payments will use real funds.${reloginNote}`
-    : `This is a test network — assets there have no real value.${reloginNote}`;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const currentId = getCurrentNetworkId();
 
   return (
     <header className="border-b border-slate-100 bg-white">
@@ -60,8 +51,8 @@ export default function Navbar() {
         <div className="relative">
           <button
             type="button"
-            onClick={() => setConfirmOpen((isOpen) => !isOpen)}
-            title="Click to switch network"
+            onClick={() => setMenuOpen((isOpen) => !isOpen)}
+            title="Switch network"
             className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
               isMainnet
                 ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
@@ -72,26 +63,23 @@ export default function Navbar() {
             {network.chainName}
           </button>
 
-          {confirmOpen && (
-            <div className="absolute right-0 top-10 z-10 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left shadow-xl">
-              <p className="text-sm font-semibold text-slate-900">Switch to {nextName}?</p>
-              <p className="mt-1.5 text-xs leading-5 text-slate-600">{warning}</p>
-              <div className="mt-3 flex gap-2">
+          {menuOpen && (
+            <div className="absolute right-0 top-10 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+              {Object.values(NETWORKS).map((option) => (
                 <button
+                  key={option.id}
                   type="button"
-                  onClick={() => setConfirmOpen(false)}
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (option.id !== currentId) switchToNetwork(option.id);
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Cancel
+                  <span className={`h-2 w-2 rounded-full ${option.id === "mainnet" ? "bg-green-500" : "bg-amber-500"}`} />
+                  {option.chainName}
+                  {option.id === currentId && <span className="ml-auto text-blue-600">✓</span>}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => performNetworkSwitch(nextId)}
-                  className="flex-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                >
-                  Switch
-                </button>
-              </div>
+              ))}
             </div>
           )}
         </div>
