@@ -13,7 +13,7 @@ import {
   getWalletSession,
 } from "../services/wallet";
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
-import { getProfileName, setProfileName } from "../utils/profile";
+import { getProfileEmail, getProfileName, setProfileName } from "../utils/profile";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -38,11 +38,12 @@ export default function CreateEscrow() {
   const navigate = useNavigate();
   const { setEscrowData } = useEscrow();
   const [buyerName, setBuyerName] = useState("");
-  const [sellerName, setSellerName] = useState("");
+  const [buyerEmail, setBuyerEmail] = useState("");
 
   useEffect(() => {
     const savedName = getProfileName(walletAddress);
     if (savedName) setBuyerName((current) => current || savedName);
+    setBuyerEmail(getProfileEmail(walletAddress));
   }, [walletAddress]);
   const [productName, setProductName] = useState("");
   const [productId, setProductId] = useState("");
@@ -123,7 +124,7 @@ export default function CreateEscrow() {
   }
 
   async function handleCreateEscrow() {
-    if (!buyerName || !sellerName || !productName || !amount) {
+    if (!buyerName || !productName || !amount) {
       setError("Please complete all required fields.");
       return;
     }
@@ -153,7 +154,7 @@ export default function CreateEscrow() {
       const response = await api.post("/escrow", {
         buyerName,
         buyerWallet,
-        sellerName,
+        buyerEmail,
         productName,
         productId,
         amount,
@@ -191,6 +192,7 @@ export default function CreateEscrow() {
             <h2 className="mb-4 text-lg font-bold">Buyer Information</h2>
             <div className="space-y-3">
               <InputField placeholder="Buyer Name" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} />
+              {buyerEmail && <p className="-mt-1 px-1 text-sm text-slate-500">Email: {buyerEmail}</p>}
               <InputField placeholder="Product / Service Name" value={productName} onChange={(event) => setProductName(event.target.value)} />
               <InputField placeholder="Product ID (Optional)" value={productId} onChange={(event) => setProductId(event.target.value)} />
               <div className="overflow-hidden rounded-xl border border-slate-300 bg-white transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
@@ -249,11 +251,6 @@ export default function CreateEscrow() {
                 <p className="mt-1 text-amber-800">This escrow request expires automatically in 12 hours if funds are not locked.</p>
               </div>
             </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border p-4 sm:p-5">
-            <h2 className="mb-4 text-lg font-bold">Seller Information</h2>
-            <InputField placeholder="Business / Seller Name" value={sellerName} onChange={(event) => setSellerName(event.target.value)} />
           </div>
 
           {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}

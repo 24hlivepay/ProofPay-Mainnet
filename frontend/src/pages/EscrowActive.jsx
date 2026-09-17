@@ -78,6 +78,7 @@ export default function EscrowActive() {
             <div className="space-y-4">
               <SummaryRow label="Buyer" value={escrowData.buyerName} />
               <SummaryRow label="Seller" value={escrowData.sellerName} />
+              {escrowData.sellerEmail && <SummaryRow label="Seller email" value={escrowData.sellerEmail} />}
               <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />
               <SummaryRow label="Escrow ID" value={escrowData.escrowId} />
               {escrowData.transactionHash && <SummaryRow label="Latest transaction" value={escrowData.transactionHash} />}

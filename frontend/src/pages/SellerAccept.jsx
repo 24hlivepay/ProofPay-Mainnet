@@ -10,7 +10,12 @@ import api from "../services/api";
 import { connectWalletWithOptions } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { getExplorerAddressUrl, getNetworkConfig } from "../config/network";
-import { getProfileName, setProfileName } from "../utils/profile";
+import {
+  getProfileEmail,
+  getProfileName,
+  setProfileEmail,
+  setProfileName,
+} from "../utils/profile";
 
 export default function SellerAccept() {
   const { walletSlot } = useWalletBadge();
@@ -19,6 +24,7 @@ export default function SellerAccept() {
   const { escrowData, setEscrowData } = useEscrow();
   const [sellerWallet, setSellerWallet] = useState("");
   const [sellerDisplayName, setSellerDisplayName] = useState("");
+  const [sellerEmail, setSellerEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -56,6 +62,7 @@ export default function SellerAccept() {
       });
       setSellerWallet(address);
       setSellerDisplayName(getProfileName(address) || escrowData.sellerName || "");
+      setSellerEmail(getProfileEmail(address));
     } catch (connectError) {
       if (connectError?.code !== 4001) {
         setError(connectError.message || "Unable to connect wallet.");
@@ -72,8 +79,10 @@ export default function SellerAccept() {
       const response = await api.post(`/escrow/${id}/accept`, {
         sellerWallet,
         sellerName: sellerDisplayName,
+        sellerEmail,
       });
       setProfileName(sellerWallet, sellerDisplayName);
+      setProfileEmail(sellerWallet, sellerEmail);
       setEscrowData(response.data.escrow);
       navigate(`/seller-verification/${id}`);
     } catch (acceptError) {

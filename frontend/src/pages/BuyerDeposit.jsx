@@ -159,7 +159,10 @@ export default function BuyerDeposit() {
             <div className="space-y-4">
               <SummaryRow label="Buyer" value={escrowData.buyerName} />
               <SummaryRow label="Buyer wallet" value={escrowData.buyerWallet} />
-              <SummaryRow label="Seller" value={escrowData.sellerName} />
+              {verified && <SummaryRow label="Seller" value={escrowData.sellerName} />}
+              {verified && escrowData.sellerEmail && (
+                <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
+              )}
               <SummaryRow label="Seller wallet" value={escrowData.sellerWallet} />
               <SummaryRow label="Product / Service" value={escrowData.productName} />
               <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />

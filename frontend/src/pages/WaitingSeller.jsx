@@ -265,11 +265,6 @@ export default function WaitingSeller() {
               </div>
 
               <div className="flex justify-between">
-                <span className="text-slate-500">Seller Name</span>
-                <strong>{escrowData.sellerName}</strong>
-              </div>
-
-              <div className="flex justify-between">
                 <span className="text-slate-500">Product / Service</span>
                 <strong>{escrowData.productName}</strong>
               </div>
