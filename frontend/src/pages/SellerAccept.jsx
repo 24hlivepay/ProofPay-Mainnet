@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
+import ProofPayLogo from "../components/ProofPayLogo";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { connectWalletWithOptions } from "../services/wallet";
@@ -123,7 +124,7 @@ export default function SellerAccept() {
         {!reviewing ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <div className="mx-auto max-w-xl text-center">
-              <img src="/proofpay-logo.svg" alt="ProofPay logo" className="mx-auto h-16 w-16 shadow-lg" />
+              <ProofPayLogo className="mx-auto h-16 w-16 shadow-lg" />
               <p className="mt-7 text-sm font-bold uppercase tracking-[0.2em] text-blue-600">ProofPay escrow invitation</p>
               <h1 className="mt-3 text-3xl font-bold text-slate-900">You have been invited to an escrow</h1>
               <p className="mt-4 text-slate-600">Review the deal first. You only connect your wallet if you choose to continue.</p>
