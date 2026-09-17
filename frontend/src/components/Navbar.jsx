@@ -5,11 +5,24 @@ function handleNetworkSwitch() {
   const currentId = getCurrentNetworkId();
   const nextId = currentId === "mainnet" ? "testnet" : "mainnet";
   const nextName = NETWORKS[nextId].chainName;
+  const isCircleWallet = localStorage.getItem("proofpay-wallet-type") === "circle";
+  const reloginNote = isCircleWallet
+    ? " Circle issues a separate wallet per network, so you'll need to sign in again for it."
+    : "";
   const warning = nextId === "mainnet"
-    ? `Switch to ${nextName}? Deposits and payments will use real funds.`
-    : `Switch to ${nextName}? This is a test network — assets there have no real value.`;
+    ? `Switch to ${nextName}? Deposits and payments will use real funds.${reloginNote}`
+    : `Switch to ${nextName}? This is a test network — assets there have no real value.${reloginNote}`;
 
   if (!window.confirm(warning)) return;
+
+  if (isCircleWallet) {
+    // Circle wallets are network-specific — the cached session/address is
+    // for the network being left. Clearing it here (rather than a full
+    // disconnectWallet()) keeps proofpay-email/-circle-auth so the next
+    // sign-in only asks for a fresh OTP, not the email again.
+    localStorage.removeItem("proofpay-wallet-session");
+    localStorage.removeItem("proofpay-last-safe-route");
+  }
 
   setCurrentNetworkId(nextId);
   window.location.reload();
