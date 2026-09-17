@@ -50,3 +50,4 @@
 [data-network] [class~="from-blue-50"] { --tw-gradient-from: var(--net-50) !important; }
 [data-network] [class~="from-blue-700"] { --tw-gradient-from: var(--net-700) !important; }
 [data-network] [class~="via-blue-600"] { --tw-gradient-via: var(--net-600) !important; }
+[data-network] [class~="to-indigo-700"] { --tw-gradient-to: var(--net-800) !important; }
