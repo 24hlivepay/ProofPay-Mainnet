@@ -1,1 +1,73 @@
 @import "tailwindcss";
+
+/* Retires blue as ProofPay's brand accent in favor of a network-driven
+   theme: green on Arc Mainnet, amber on Arc Testnet. Rather than editing
+   every bg-blue-*/text-blue-*/border-blue-* utility across ~20+ page
+   files by hand, this overrides them centrally by class name, scoped to
+   the data-network attribute main.jsx sets on <html>. See MAINNET_TODO.md. */
+[data-network="mainnet"] {
+  --net-50: #f0fdf4;
+  --net-100: #dcfce7;
+  --net-200: #bbf7d0;
+  --net-300: #86efac;
+  --net-400: #4ade80;
+  --net-500: #22c55e;
+  --net-600: #16a34a;
+  --net-700: #15803d;
+  --net-800: #166534;
+  --net-900: #14532d;
+}
+
+[data-network="testnet"] {
+  --net-50: #fffbeb;
+  --net-100: #fef3c7;
+  --net-200: #fde68a;
+  --net-300: #fcd34d;
+  --net-400: #fbbf24;
+  --net-500: #f59e0b;
+  --net-600: #d97706;
+  --net-700: #b45309;
+  --net-800: #92400e;
+  --net-900: #78350f;
+}
+
+[data-network] [class~="bg-blue-50"] { background-color: var(--net-50) !important; }
+[data-network] [class~="bg-blue-100"] { background-color: var(--net-100) !important; }
+[data-network] [class~="bg-blue-300"] { background-color: var(--net-300) !important; }
+[data-network] [class~="bg-blue-600"] { background-color: var(--net-600) !important; }
+[data-network] [class~="bg-blue-700"] { background-color: var(--net-700) !important; }
+[data-network] [class~="hover:bg-blue-50"]:hover { background-color: var(--net-50) !important; }
+[data-network] [class~="hover:bg-blue-100"]:hover { background-color: var(--net-100) !important; }
+[data-network] [class~="hover:bg-blue-600"]:hover { background-color: var(--net-600) !important; }
+[data-network] [class~="hover:bg-blue-700"]:hover { background-color: var(--net-700) !important; }
+[data-network] [class~="disabled:bg-blue-300"]:disabled { background-color: var(--net-300) !important; }
+[data-network] [class~="file:bg-blue-600"]::file-selector-button { background-color: var(--net-600) !important; }
+[data-network] [class~="hover:file:bg-blue-700"]:hover::file-selector-button { background-color: var(--net-700) !important; }
+
+[data-network] [class~="border-blue-100"] { border-color: var(--net-100) !important; }
+[data-network] [class~="border-blue-200"] { border-color: var(--net-200) !important; }
+[data-network] [class~="border-blue-400"] { border-color: var(--net-400) !important; }
+[data-network] [class~="border-blue-500"] { border-color: var(--net-500) !important; }
+[data-network] [class~="border-blue-600"] { border-color: var(--net-600) !important; }
+[data-network] [class~="border-t-blue-600"] { border-top-color: var(--net-600) !important; }
+[data-network] [class~="hover:border-blue-400"]:hover { border-color: var(--net-400) !important; }
+[data-network] [class~="hover:border-blue-500"]:hover { border-color: var(--net-500) !important; }
+[data-network] [class~="focus-within:border-blue-500"]:focus-within { border-color: var(--net-500) !important; }
+[data-network] [class~="focus:border-blue-500"]:focus { border-color: var(--net-500) !important; }
+
+[data-network] [class~="focus-within:ring-blue-100"]:focus-within { --tw-ring-color: var(--net-100) !important; }
+[data-network] [class~="focus:ring-blue-100"]:focus { --tw-ring-color: var(--net-100) !important; }
+[data-network] [class~="shadow-blue-200"] { --tw-shadow-color: var(--net-200) !important; }
+
+[data-network] [class~="text-blue-50"] { color: var(--net-50) !important; }
+[data-network] [class~="text-blue-100"] { color: var(--net-100) !important; }
+[data-network] [class~="text-blue-600"] { color: var(--net-600) !important; }
+[data-network] [class~="text-blue-700"] { color: var(--net-700) !important; }
+[data-network] [class~="text-blue-800"] { color: var(--net-800) !important; }
+[data-network] [class~="text-blue-900"] { color: var(--net-900) !important; }
+[data-network] [class~="hover:text-blue-600"]:hover { color: var(--net-600) !important; }
+[data-network] [class~="hover:text-blue-700"]:hover { color: var(--net-700) !important; }
+
+[data-network] [class~="from-blue-50"] { --tw-gradient-from: var(--net-50) !important; }
+[data-network] [class~="from-blue-700"] { --tw-gradient-from: var(--net-700) !important; }
+[data-network] [class~="via-blue-600"] { --tw-gradient-via: var(--net-600) !important; }
