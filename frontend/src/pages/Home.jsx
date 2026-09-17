@@ -286,8 +286,12 @@ export default function Home() {
 
       <main className="mx-auto max-w-5xl px-5 py-7 sm:px-6">
         <div className="mb-7">
-          <h1 className="text-3xl font-bold text-slate-900">{mode === "buyer" ? "Buying Escrows" : mode === "seller" ? "Selling Escrows" : "Choose Your Workspace"}</h1>
-          <p className="mt-2 text-slate-600">{mode ? "Manage your escrow records in this workspace." : "Choose whether you want to buy or sell with this wallet."}</p>
+          {mode && (
+            <>
+              <h1 className="text-3xl font-bold text-slate-900">{mode === "buyer" ? "Buying Escrows" : "Selling Escrows"}</h1>
+              <p className="mt-2 text-slate-600">Manage your escrow records in this workspace.</p>
+            </>
+          )}
 
           {walletError && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{walletError}</p>}
           {walletStatus && <p className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-700">{walletStatus}</p>}
@@ -368,7 +372,7 @@ function LiveEscrowOverview({
     <section className={`overflow-hidden rounded-2xl ${heroGradient} p-5 text-white shadow-lg sm:p-6`}>
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <p className={`text-sm font-bold uppercase tracking-[0.18em] ${isTestnetHero ? "text-amber-100" : "text-green-200"}`}>Live ProofPay Network</p>
+          <p className={`text-sm font-semibold ${isTestnetHero ? "text-amber-100" : "text-green-100"}`}>Choose whether you want to buy or sell with this wallet.</p>
           <h2 className="mt-2 text-xl font-bold sm:text-2xl">Protected by smart-contract escrow</h2>
         </div>
         {getCurrentNetworkId() === "testnet" && (
