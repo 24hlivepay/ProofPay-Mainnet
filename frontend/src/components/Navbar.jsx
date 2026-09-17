@@ -10,7 +10,13 @@ function performNetworkSwitch(nextId) {
     // for the network being left. Clearing it here (rather than a full
     // disconnectWallet()) keeps proofpay-email/-circle-auth so the next
     // sign-in only asks for a fresh OTP, not the email again.
+    // proofpay-wallet is a second, separate cache of the same address
+    // (OtpVerification.jsx sets both; proofpayContract.js's Circle-wallet
+    // functions read this one directly) — cleared too so a deep-linked
+    // route that skips SessionLanding's redirect can't read the old
+    // network's address before a fresh sign-in overwrites it.
     localStorage.removeItem("proofpay-wallet-session");
+    localStorage.removeItem("proofpay-wallet");
     localStorage.removeItem("proofpay-last-safe-route");
   }
 
