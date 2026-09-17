@@ -41,31 +41,6 @@ export default function Home() {
   const [sellerCounts, setSellerCounts] = useState(EMPTY_COUNTS);
   const [networkStats, setNetworkStats] = useState(null);
   const [networkStatsError, setNetworkStatsError] = useState("");
-  const [networkName, setNetworkName] = useState(
-    isCircleWallet ? getNetworkConfig().chainName : "Checking network..."
-  );
-
-  useEffect(() => {
-    if (isCircleWallet) {
-      return undefined;
-    }
-
-    if (!window.ethereum) {
-      setNetworkName("No wallet detected");
-      return undefined;
-    }
-
-    const updateNetworkName = (chainId) => {
-      setNetworkName(getNetworkName(chainId));
-    };
-
-    window.ethereum.request({ method: "eth_chainId" })
-      .then(updateNetworkName)
-      .catch(() => setNetworkName("Network unavailable"));
-
-    window.ethereum.on?.("chainChanged", updateNetworkName);
-    return () => window.ethereum.removeListener?.("chainChanged", updateNetworkName);
-  }, [isCircleWallet]);
 
   useEffect(() => {
     if (isCircleWallet) return undefined;
@@ -207,7 +182,6 @@ export default function Home() {
         signedAt: walletSession.signedAt,
       });
       setWalletAddress(walletSession.address);
-      setNetworkName(getNetworkConfig().chainName);
       setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}.`);
       setWalletMenuOpen(false);
     } catch (error) {
@@ -288,7 +262,6 @@ export default function Home() {
             stats={networkStats}
             statsError={networkStatsError}
             shortWallet={shortWallet}
-            networkName={networkName}
             walletMenuOpen={walletMenuOpen}
             onWalletClick={handleWalletButton}
             onChangeWallet={() => (
@@ -350,7 +323,6 @@ function LiveEscrowOverview({
   stats,
   statsError,
   shortWallet,
-  networkName,
   walletMenuOpen,
   onWalletClick,
   onChangeWallet,
@@ -377,7 +349,6 @@ function LiveEscrowOverview({
           <button onClick={onWalletClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
             {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
           </button>
-          <div className="flex h-12 w-56 items-center justify-center rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm">Network: {networkName}</div>
           {getCurrentNetworkId() === "testnet" && (
             <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
               Faucet
@@ -396,7 +367,9 @@ function LiveEscrowOverview({
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="USDC Locked" value={hasStats ? `${formatLockedAmount("USDC")} USDC` : "Loading…"} />
         <StatCard label="EURC Locked" value={hasStats ? `${formatLockedAmount("EURC")} EURC` : "Loading…"} />
-        <StatCard label="cirBTC Locked" value={hasStats ? `${formatLockedAmount("cirBTC")} cirBTC` : "Loading…"} />
+        {getCurrentNetworkId() === "testnet" && (
+          <StatCard label="cirBTC Locked" value={hasStats ? `${formatLockedAmount("cirBTC")} cirBTC` : "Loading…"} />
+        )}
         <StatCard label="Executed Escrows" value={hasStats ? stats.executedEscrows ?? "Checking…" : "Loading…"} />
       </div>
       {statsError && <p className="mt-5 text-sm font-medium text-blue-100">{statsError}</p>}
@@ -411,20 +384,6 @@ function StatCard({ label, value }) {
       <p className="mt-1.5 text-xl font-bold">{value}</p>
     </div>
   );
-}
-
-function getNetworkName(chainId) {
-  const networks = {
-    "0x13b2": "Arc Mainnet",
-    "0x4cef52": "Arc Testnet",
-    "0xa4b1": "Arbitrum One",
-    "0x66eee": "Arbitrum Sepolia",
-    "0x1": "Ethereum",
-    "0x2105": "Base",
-    "0x89": "Polygon",
-  };
-
-  return networks[String(chainId || "").toLowerCase()] || "Unsupported Network";
 }
 
 function BackToWorkspaces({ onClick }) {
