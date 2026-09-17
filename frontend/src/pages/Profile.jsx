@@ -3,20 +3,30 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import InputField from "../components/InputField";
 import { useWalletBadge } from "../hooks/useWalletBadge";
-import { getProfileName, setProfileName } from "../utils/profile";
+import {
+  getProfileEmail,
+  getProfileName,
+  setProfileEmail,
+  setProfileName,
+} from "../utils/profile";
 
 export default function Profile() {
   const { walletSlot, walletAddress } = useWalletBadge();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setName(getProfileName(walletAddress));
+    setEmail(
+      getProfileEmail(walletAddress) || localStorage.getItem("proofpay-email") || ""
+    );
   }, [walletAddress]);
 
   function handleSave() {
     setProfileName(walletAddress, name);
+    setProfileEmail(walletAddress, email);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -43,23 +53,35 @@ export default function Profile() {
 
       <div className="mt-8 text-left">
         <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Your Name
+          User Name
         </label>
         <InputField
-          placeholder="Enter your name"
+          placeholder="Your personal name or company name"
           value={name}
           onChange={(event) => setName(event.target.value)}
           disabled={!walletAddress}
         />
         <p className="mt-2 text-sm text-slate-500">
-          This name fills in automatically as Buyer Name when you create an escrow, and as Seller Name when you accept one.
+          This fills in automatically as Buyer Name when you create an escrow, and as Seller Name when you accept one.
         </p>
+
+        <label className="mb-2 mt-6 block text-sm font-semibold text-slate-700">
+          Email Address
+        </label>
+        <InputField
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          disabled={!walletAddress}
+        />
+
         <button
           onClick={handleSave}
-          disabled={!walletAddress || !name.trim()}
-          className="mt-4 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!walletAddress || (!name.trim() && !email.trim())}
+          className="mt-6 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saved ? "Saved ✓" : "Save Name"}
+          {saved ? "Saved ✓" : "Save Profile"}
         </button>
       </div>
 
