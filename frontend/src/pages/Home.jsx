@@ -244,9 +244,39 @@ export default function Home() {
       ? "seller"
       : "";
 
+  const walletSlot = (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={handleWalletButton}
+        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+      >
+        {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
+      </button>
+
+      {walletMenuOpen && (
+        <div className="absolute right-0 top-10 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+          <button
+            onClick={() => (
+              isCircleWallet
+                ? navigate("/login")
+                : handleConnectWallet({ requestAccountSelection: true })
+            )}
+            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Change Wallet
+          </button>
+          <button onClick={handleDisconnectWallet} className="w-full px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50">
+            Disconnect Wallet
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar />
+      <Navbar walletSlot={walletSlot} />
 
       <main className="mx-auto max-w-5xl px-5 py-7 sm:px-6">
         <div className="mb-7">
@@ -261,15 +291,6 @@ export default function Home() {
           <LiveEscrowOverview
             stats={networkStats}
             statsError={networkStatsError}
-            shortWallet={shortWallet}
-            walletMenuOpen={walletMenuOpen}
-            onWalletClick={handleWalletButton}
-            onChangeWallet={() => (
-              isCircleWallet
-                ? navigate("/login")
-                : handleConnectWallet({ requestAccountSelection: true })
-            )}
-            onDisconnectWallet={handleDisconnectWallet}
             onFaucetClick={() => window.open(CIRCLE_FAUCET_URL, "_blank", "noopener,noreferrer")}
           />
         )}
@@ -322,11 +343,6 @@ export default function Home() {
 function LiveEscrowOverview({
   stats,
   statsError,
-  shortWallet,
-  walletMenuOpen,
-  onWalletClick,
-  onChangeWallet,
-  onDisconnectWallet,
   onFaucetClick,
 }) {
   const hasStats = Boolean(stats);
@@ -345,23 +361,11 @@ function LiveEscrowOverview({
           <h2 className="mt-2 text-xl font-bold sm:text-2xl">Protected by smart-contract escrow</h2>
           <p className="mt-2 max-w-2xl text-sm text-blue-100 sm:text-base">Live values read directly from the deployed {getNetworkConfig().chainName} escrow contract.</p>
         </div>
-        <div className="relative grid w-56 grid-cols-1 gap-3">
-          <button onClick={onWalletClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
-            {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
+        {getCurrentNetworkId() === "testnet" && (
+          <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
+            Faucet
           </button>
-          {getCurrentNetworkId() === "testnet" && (
-            <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
-              Faucet
-            </button>
-          )}
-
-          {walletMenuOpen && (
-            <div className="absolute right-0 top-12 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
-              <button onClick={onChangeWallet} className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Change Wallet</button>
-              <button onClick={onDisconnectWallet} className="w-full px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50">Disconnect Wallet</button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

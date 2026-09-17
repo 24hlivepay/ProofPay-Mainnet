@@ -24,7 +24,7 @@ function switchToNetwork(nextId) {
   window.location.reload();
 }
 
-export default function Navbar() {
+export default function Navbar({ walletSlot }) {
   const navigate = useNavigate();
   const network = getNetworkConfig();
   const isMainnet = network.id === "mainnet";
@@ -48,6 +48,8 @@ export default function Navbar() {
           </span>
         </button>
 
+        <div className="flex items-center gap-3">
+        {walletSlot}
         <div className="relative">
           <button
             type="button"
@@ -82,6 +84,7 @@ export default function Navbar() {
               ))}
             </div>
           )}
+        </div>
         </div>
       </nav>
     </header>
