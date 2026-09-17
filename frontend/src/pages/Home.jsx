@@ -234,6 +234,15 @@ export default function Home() {
       return;
     }
 
+    // A Circle wallet with no active session (e.g. after switching Arc
+    // networks, which signs the user out of the network-specific Circle
+    // wallet) needs a fresh email/OTP sign-in, not the MetaMask/Rabby
+    // flow this button otherwise triggers.
+    if (isCircleWallet) {
+      navigate("/login");
+      return;
+    }
+
     handleConnectWallet();
   }
 

@@ -203,7 +203,7 @@ export function getWalletErrorMessage(error) {
     return "You cancelled the MetaMask request. You can connect whenever you are ready.";
   }
 
-  if (/not installed/i.test(message)) {
+  if (/not installed/i.test(message) || /circle wallet session has expired/i.test(message)) {
     return message;
   }
 
