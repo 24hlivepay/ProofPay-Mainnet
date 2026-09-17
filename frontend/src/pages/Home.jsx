@@ -402,12 +402,19 @@ function BackToWorkspaces({ onClick }) {
 }
 
 function WorkspaceCard({ icon, title, description, onClick }) {
+  const isTestnet = getCurrentNetworkId() === "testnet";
+
   return (
-    <button onClick={onClick} className="rounded-2xl border border-blue-200 bg-white p-5 text-center shadow-sm transition hover:-translate-y-1 hover:border-blue-400 hover:shadow-lg">
+    <button
+      onClick={onClick}
+      className={`rounded-2xl border bg-white p-5 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
+        isTestnet ? "border-amber-200 hover:border-amber-400" : "border-blue-200 hover:border-blue-400"
+      }`}
+    >
       <div className="text-3xl">{icon}</div>
       <h2 className="mt-3 text-xl font-bold text-slate-900">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-      <span className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Open {title}</span>
+      <span className={`mt-4 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white ${isTestnet ? "bg-amber-600" : "bg-blue-600"}`}>Open {title}</span>
     </button>
   );
 }
