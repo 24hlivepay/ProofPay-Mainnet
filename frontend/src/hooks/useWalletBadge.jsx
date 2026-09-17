@@ -8,6 +8,7 @@ import {
 } from "../services/wallet";
 import api from "../services/api";
 import { useClickOutside } from "./useClickOutside";
+import { getCurrentNetworkId } from "../config/network";
 
 // The Navbar wallet badge (address + Change/Disconnect menu), shared by
 // every page so it isn't only visible on Home.jsx's dashboard. Home.jsx
@@ -69,12 +70,18 @@ export function useWalletBadge() {
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : null;
 
+  const isMainnet = getCurrentNetworkId() === "mainnet";
+
   const walletSlot = (
     <div className="relative" ref={menuRef}>
       <button
         type="button"
         onClick={handleClick}
-        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+          isMainnet
+            ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+            : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+        }`}
       >
         {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
       </button>

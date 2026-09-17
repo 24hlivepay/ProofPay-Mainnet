@@ -251,7 +251,11 @@ export default function Home() {
       <button
         type="button"
         onClick={handleWalletButton}
-        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+          getCurrentNetworkId() === "mainnet"
+            ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+            : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+        }`}
       >
         {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
       </button>
