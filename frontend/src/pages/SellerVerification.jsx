@@ -98,7 +98,7 @@ export default function SellerVerification() {
     <div className="rounded-2xl border border-green-200 bg-white p-6 text-center shadow-lg sm:p-8">
       <div className="text-5xl">🔒</div>
       <h1 className="mt-4 text-3xl font-bold text-green-700">{escrowData.assetSymbol || "USDC"} Locked</h1>
-      <p className="mt-5 text-lg text-slate-600">The buyer’s {escrowData.assetSymbol || "USDC"} is locked in the ARC Testnet escrow contract.</p>
+      <p className="mt-5 text-lg text-slate-600">The buyer’s {escrowData.assetSymbol || "USDC"} is locked in the {getNetworkConfig().chainName} escrow contract.</p>
       {escrowData.depositTransactionHash && <TransactionProof hash={escrowData.depositTransactionHash} assetSymbol={escrowData.assetSymbol} />}
       <div className="mt-10"><PrimaryButton onClick={completeDelivery} disabled={submitting}>{submitting ? "Confirming Delivery..." : "Delivery Completed"}</PrimaryButton></div>
     </div>

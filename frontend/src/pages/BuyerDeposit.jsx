@@ -8,6 +8,7 @@ import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
 import { fundEscrow } from "../services/proofpayContract";
 import { connectWallet } from "../services/wallet";
+import { getNetworkConfig } from "../config/network";
 
 export default function BuyerDeposit() {
   const { walletSlot } = useWalletBadge();
@@ -196,7 +197,7 @@ export default function BuyerDeposit() {
             </div>
           </div>
 
-          {verified && <div className="mt-8 rounded-2xl border border-green-200 bg-green-50 p-6 text-green-700">Seller verified. You can now lock the {escrowData.assetSymbol || "USDC"} in the live ARC Testnet contract.</div>}
+          {verified && <div className="mt-8 rounded-2xl border border-green-200 bg-green-50 p-6 text-green-700">Seller verified. You can now lock the {escrowData.assetSymbol || "USDC"} in the live {getNetworkConfig().chainName} contract.</div>}
           {error && (
             <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
               <p className="font-bold">
