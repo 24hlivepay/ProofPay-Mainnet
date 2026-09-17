@@ -645,7 +645,13 @@ app.post("/api/circle/transfer", async (req, res) => {
     !walletId ||
     !/^[a-fA-F0-9-]{36}$/.test(tokenId) ||
     !/^0x[a-fA-F0-9]{40}$/.test(destinationAddress) ||
-    !/^\d+(\.\d{1,6})?$/.test(amount) ||
+    // Up to 18 decimals, not 6: this endpoint also handles Arc's native
+    // USDC, which CircleWallet.jsx's MAX button formats at 18-decimal
+    // precision (its actual on-chain accounting), not the 6 decimals a
+    // plain ERC-20 USDC amount would use. A 6-decimal cap here rejected
+    // every legitimate MAX-amount native transfer with this exact
+    // "invalid amount" message.
+    !/^\d+(\.\d{1,18})?$/.test(amount) ||
     Number(amount) <= 0
   ) {
     return res.status(400).json({
