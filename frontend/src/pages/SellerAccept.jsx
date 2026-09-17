@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
+import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import ProofPayLogo from "../components/ProofPayLogo";
 import { useEscrow } from "../context/EscrowContext";
@@ -9,6 +10,7 @@ import api from "../services/api";
 import { connectWalletWithOptions } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { getExplorerAddressUrl, getNetworkConfig } from "../config/network";
+import { getProfileName, setProfileName } from "../utils/profile";
 
 export default function SellerAccept() {
   const { walletSlot } = useWalletBadge();
@@ -16,6 +18,7 @@ export default function SellerAccept() {
   const { id } = useParams();
   const { escrowData, setEscrowData } = useEscrow();
   const [sellerWallet, setSellerWallet] = useState("");
+  const [sellerDisplayName, setSellerDisplayName] = useState("");
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -52,6 +55,7 @@ export default function SellerAccept() {
         requireSignature: true,
       });
       setSellerWallet(address);
+      setSellerDisplayName(getProfileName(address) || escrowData.sellerName || "");
     } catch (connectError) {
       if (connectError?.code !== 4001) {
         setError(connectError.message || "Unable to connect wallet.");
@@ -65,7 +69,11 @@ export default function SellerAccept() {
     try {
       setAccepting(true);
       setError("");
-      const response = await api.post(`/escrow/${id}/accept`, { sellerWallet });
+      const response = await api.post(`/escrow/${id}/accept`, {
+        sellerWallet,
+        sellerName: sellerDisplayName,
+      });
+      setProfileName(sellerWallet, sellerDisplayName);
       setEscrowData(response.data.escrow);
       navigate(`/seller-verification/${id}`);
     } catch (acceptError) {
@@ -174,6 +182,15 @@ export default function SellerAccept() {
               <strong className="break-all text-green-700">{sellerWallet}</strong>
             </div>
 
+            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Your Name (shown to the buyer)</label>
+              <InputField
+                placeholder="Business / Seller Name"
+                value={sellerDisplayName}
+                onChange={(event) => setSellerDisplayName(event.target.value)}
+              />
+            </div>
+
             <div className="mt-6 rounded-xl border border-slate-200 p-5 sm:p-6">
               <div className="space-y-4">
                 <SummaryRow label="Buyer" value={escrow.buyerName} />
@@ -182,7 +199,6 @@ export default function SellerAccept() {
                   value={escrow.buyerWallet}
                   valueClassName="font-mono text-blue-700"
                 />
-                <SummaryRow label="Seller" value={escrow.sellerName} />
                 <SummaryRow label="Product / Service" value={escrow.productName} />
                 <SummaryRow label="Amount" value={escrow.amount ? `${escrow.amount} ${escrow.assetSymbol || "USDC"}` : "—"} />
                 <SummaryRow label="Network" value={getNetworkConfig().chainName} />

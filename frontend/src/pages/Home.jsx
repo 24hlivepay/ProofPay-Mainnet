@@ -263,6 +263,15 @@ export default function Home() {
       {walletMenuOpen && (
         <div className="absolute right-0 top-10 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
           <button
+            onClick={() => {
+              setWalletMenuOpen(false);
+              navigate("/profile");
+            }}
+            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Profile
+          </button>
+          <button
             onClick={() => (
               isCircleWallet
                 ? navigate("/login")

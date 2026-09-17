@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
@@ -13,6 +13,7 @@ import {
   getWalletSession,
 } from "../services/wallet";
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
+import { getProfileName, setProfileName } from "../utils/profile";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -33,11 +34,16 @@ function truncateAssetAmount(value, decimals) {
 }
 
 export default function CreateEscrow() {
-  const { walletSlot } = useWalletBadge();
+  const { walletSlot, walletAddress } = useWalletBadge();
   const navigate = useNavigate();
   const { setEscrowData } = useEscrow();
   const [buyerName, setBuyerName] = useState("");
   const [sellerName, setSellerName] = useState("");
+
+  useEffect(() => {
+    const savedName = getProfileName(walletAddress);
+    if (savedName) setBuyerName((current) => current || savedName);
+  }, [walletAddress]);
   const [productName, setProductName] = useState("");
   const [productId, setProductId] = useState("");
   const [amount, setAmount] = useState("");
@@ -143,6 +149,7 @@ export default function CreateEscrow() {
       setSubmitting(true);
       setError("");
       const { address: buyerWallet } = await connectWallet();
+      setProfileName(buyerWallet, buyerName);
       const response = await api.post("/escrow", {
         buyerName,
         buyerWallet,

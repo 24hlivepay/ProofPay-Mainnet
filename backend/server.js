@@ -995,7 +995,7 @@ app.get("/api/escrow/:id/status", async (req, res) => {
 
 app.post("/api/escrow/:id/accept", async (req, res) => {
 
-  const { sellerWallet } = req.body;
+  const { sellerWallet, sellerName } = req.body;
 
   const allEscrows = await loadEscrows();
 
@@ -1028,6 +1028,9 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
 
   escrow.status = "Seller Accepted";
   escrow.sellerWallet = sellerWallet;
+  if (sellerName && sellerName.trim()) {
+    escrow.sellerName = sellerName.trim();
+  }
   escrow.sellerVerified = false;
   escrow.sellerVerifiedAt = null;
   escrow.verificationCode = Math.floor(
