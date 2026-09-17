@@ -250,6 +250,7 @@ export default function CircleWallet() {
           destinationAddress: normalizedRecipient,
           amount: normalizedAmount,
           tokenId: selectedAsset.token.id,
+          symbol: selectedAsset.token.symbol,
           onSubmitted: () => {
             setStatus("Transfer approved. Waiting for Arc confirmation...");
           },

@@ -132,6 +132,7 @@ export async function sendCircleToken({
   destinationAddress,
   amount,
   tokenId,
+  symbol,
   onSubmitted,
 }) {
   const { auth, wallet } = getCircleSession();
@@ -157,6 +158,23 @@ export async function sendCircleToken({
     challengeId,
     userToken: auth.userToken,
     encryptionKey: auth.encryptionKey,
+    // Without its own display, this reuses whatever label a previous
+    // Circle SDK call set (e.g. escrow's "Lock X USDC") — the SDK
+    // instance is a shared singleton, so a plain wallet transfer needs
+    // its own confirmLabel/title or it inherits stale escrow copy.
+    display: {
+      title: "Send Token",
+      subtitle: "Send from your Arc wallet to another address.",
+      amount: String(amount),
+      symbol,
+      fromLabel: "Sending wallet",
+      contractLabel: "Recipient",
+      contractName: destinationAddress,
+      totalLabel: "Amount to send",
+      confirmLabel: `Send ${amount} ${symbol}`,
+      action: "Send funds",
+      details: [`Recipient: ${destinationAddress}`],
+    },
   });
 
   const transactionId = await getTransactionId(challengeId, auth.userToken);
