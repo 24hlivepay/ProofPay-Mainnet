@@ -1,35 +1,14 @@
 @import "tailwindcss";
 
-/* Retires blue as ProofPay's brand accent in favor of a network-driven
-   theme: green on Arc Mainnet, amber on Arc Testnet. Rather than editing
-   every bg-blue-*/text-blue-*/border-blue-* utility across ~20+ page
-   files by hand, this overrides them centrally by class name, scoped to
-   the data-network attribute main.jsx sets on <html>. See MAINNET_TODO.md. */
-[data-network="mainnet"] {
-  --net-50: #f0fdf4;
-  --net-100: #dcfce7;
-  --net-200: #bbf7d0;
-  --net-300: #86efac;
-  --net-400: #4ade80;
-  --net-500: #22c55e;
-  --net-600: #16a34a;
-  --net-700: #15803d;
-  --net-800: #166534;
-  --net-900: #14532d;
-}
-
-[data-network="testnet"] {
-  --net-50: #fffbeb;
-  --net-100: #fef3c7;
-  --net-200: #fde68a;
-  --net-300: #fcd34d;
-  --net-400: #fbbf24;
-  --net-500: #f59e0b;
-  --net-600: #d97706;
-  --net-700: #b45309;
-  --net-800: #92400e;
-  --net-900: #78350f;
-}
+/* Retires blue as the brand accent in favor of a network-driven theme:
+   green on Arc Mainnet, amber on Arc Testnet. Rather than editing every
+   blue Tailwind utility across ~20 page files by hand, this overrides
+   them centrally by class name. The actual net color values are set
+   inline on the html element by main.jsx in plain JS, not as two CSS
+   blocks here, because the production build previously dropped one of
+   two near-identical attribute-selector blocks as a false duplicate,
+   which made every override below resolve to nothing and every blue
+   button or card render invisible. See MAINNET_TODO.md for the history. */
 
 [data-network] [class~="bg-blue-50"] { background-color: var(--net-50) !important; }
 [data-network] [class~="bg-blue-100"] { background-color: var(--net-100) !important; }
