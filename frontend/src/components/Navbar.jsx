@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentNetworkId, getNetworkConfig, NETWORKS, setCurrentNetworkId } from "../config/network";
+import { useClickOutside } from "../hooks/useClickOutside";
 
 function switchToNetwork(nextId) {
   const isCircleWallet = localStorage.getItem("proofpay-wallet-type") === "circle";
@@ -30,6 +31,7 @@ export default function Navbar({ walletSlot }) {
   const isMainnet = network.id === "mainnet";
   const [menuOpen, setMenuOpen] = useState(false);
   const currentId = getCurrentNetworkId();
+  const menuRef = useClickOutside(menuOpen, () => setMenuOpen(false));
 
   return (
     <header className="border-b border-slate-100 bg-white">
@@ -50,7 +52,7 @@ export default function Navbar({ walletSlot }) {
 
         <div className="flex items-center gap-3">
         {walletSlot}
-        <div className="relative">
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setMenuOpen((isOpen) => !isOpen)}

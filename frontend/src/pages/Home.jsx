@@ -10,6 +10,7 @@ import {
 import { getLiveContractStats } from "../services/proofpayContract";
 import api from "../services/api";
 import { getCurrentNetworkId, getNetworkConfig } from "../config/network";
+import { useClickOutside } from "../hooks/useClickOutside";
 
 const EMPTY_COUNTS = { pending: 0, active: 0, completed: 0, cancelled: 0, disputes: 0 };
 const EMPTY_STATS = {
@@ -37,6 +38,7 @@ export default function Home() {
   const [walletError, setWalletError] = useState("");
   const [walletStatus, setWalletStatus] = useState("");
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const walletMenuRef = useClickOutside(walletMenuOpen, () => setWalletMenuOpen(false));
   const [buyerCounts, setBuyerCounts] = useState(EMPTY_COUNTS);
   const [sellerCounts, setSellerCounts] = useState(EMPTY_COUNTS);
   const [networkStats, setNetworkStats] = useState(null);
@@ -245,7 +247,7 @@ export default function Home() {
       : "";
 
   const walletSlot = (
-    <div className="relative">
+    <div className="relative" ref={walletMenuRef}>
       <button
         type="button"
         onClick={handleWalletButton}
