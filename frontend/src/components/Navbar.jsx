@@ -53,7 +53,10 @@ export default function Navbar({ walletSlot }) {
           onClick={() => navigate("/")}
           className="flex items-center gap-3 text-left"
         >
-          <img src="/proofpay-logo.svg" alt="" className="h-10 w-10" />
+          <svg viewBox="0 0 64 64" role="img" aria-label="ProofPay" className="h-10 w-10">
+            <rect width="64" height="64" rx="17" fill={isMainnet ? "#16a34a" : "#d97706"} />
+            <path fill="#fff" d="M23 16h11.5C43 16 48 20.6 48 28c0 7.6-5.3 12.2-13.9 12.2h-3.8V49H23V16Zm7.3 6.6v11.1h3.8c4.2 0 6.5-1.9 6.5-5.6 0-3.6-2.3-5.5-6.5-5.5h-3.8Z" />
+          </svg>
           <span className="text-lg font-bold tracking-tight text-slate-900">
             ProofPay
           </span>
