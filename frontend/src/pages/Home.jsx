@@ -370,7 +370,6 @@ function LiveEscrowOverview({
         <div>
           <p className={`text-sm font-bold uppercase tracking-[0.18em] ${isTestnetHero ? "text-amber-100" : "text-green-200"}`}>Live ProofPay Network</p>
           <h2 className="mt-2 text-xl font-bold sm:text-2xl">Protected by smart-contract escrow</h2>
-          <p className={`mt-2 max-w-2xl text-sm sm:text-base ${isTestnetHero ? "text-amber-100" : "text-green-100"}`}>Live values read directly from the deployed {getNetworkConfig().chainName} escrow contract.</p>
         </div>
         {getCurrentNetworkId() === "testnet" && (
           <button onClick={onFaucetClick} className="h-12 w-56 rounded-xl bg-white px-4 text-center text-[17px] font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50">
