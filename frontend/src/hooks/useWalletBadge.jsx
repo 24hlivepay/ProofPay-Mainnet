@@ -89,8 +89,8 @@ export function useWalletBadge() {
 
       {menuOpen && (
         <div className="absolute right-0 top-10 z-10 w-full overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
-            <span className="font-mono text-sm text-slate-700">{shortWallet}</span>
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+            <span className="font-mono text-xs text-slate-700">{shortWallet}</span>
             <CopyButton value={walletAddress} />
           </div>
           <button
@@ -98,18 +98,18 @@ export function useWalletBadge() {
               setMenuOpen(false);
               navigate("/profile");
             }}
-            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Profile
           </button>
           <button
             onClick={() => (isCircleWallet ? navigate("/login") : connect({ requestAccountSelection: true }))}
-            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Change Wallet
           </button>
-          <button onClick={handleDisconnect} className="w-full px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50">
-            Disconnect Wallet
+          <button onClick={handleDisconnect} className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+            Disconnect
           </button>
         </div>
       )}

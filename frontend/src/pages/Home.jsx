@@ -263,8 +263,8 @@ export default function Home() {
 
       {walletMenuOpen && (
         <div className="absolute right-0 top-10 z-10 w-full overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
-            <span className="font-mono text-sm text-slate-700">{shortWallet}</span>
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+            <span className="font-mono text-xs text-slate-700">{shortWallet}</span>
             <CopyButton value={walletAddress} />
           </div>
           <button
@@ -272,7 +272,7 @@ export default function Home() {
               setWalletMenuOpen(false);
               navigate("/profile");
             }}
-            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Profile
           </button>
@@ -282,12 +282,12 @@ export default function Home() {
                 ? navigate("/login")
                 : handleConnectWallet({ requestAccountSelection: true })
             )}
-            className="w-full px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Change Wallet
           </button>
-          <button onClick={handleDisconnectWallet} className="w-full px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50">
-            Disconnect Wallet
+          <button onClick={handleDisconnectWallet} className="w-full whitespace-nowrap px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+            Disconnect
           </button>
         </div>
       )}
