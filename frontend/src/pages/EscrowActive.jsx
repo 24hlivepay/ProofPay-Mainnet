@@ -90,14 +90,11 @@ export default function EscrowActive() {
             </div>
           </div>
 
+          <h2 className={`mt-8 text-2xl font-bold ${delivered ? "text-blue-700" : "text-yellow-700"}`}>{delivered ? "Seller Confirmed Delivery" : "Funds Locked"}</h2>
+
           {escrowData.depositTransactionHash && (
             <TransactionProof hash={escrowData.depositTransactionHash} assetSymbol={escrowData.assetSymbol} />
           )}
-
-          <div className={`mt-8 rounded-2xl border p-6 ${delivered ? "border-blue-200 bg-blue-50" : "border-yellow-200 bg-yellow-50"}`}>
-            <h2 className={`text-2xl font-bold ${delivered ? "text-blue-700" : "text-yellow-700"}`}>{delivered ? "Seller Confirmed Delivery" : "Funds Locked"}</h2>
-            <p className="mt-3 text-slate-700">{delivered ? `Review the delivery, then release the ${escrowData.assetSymbol || "USDC"} to the seller.` : `${escrowData.assetSymbol || "USDC"} is held in the live smart contract until the seller confirms delivery.`}</p>
-          </div>
 
           {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
 
