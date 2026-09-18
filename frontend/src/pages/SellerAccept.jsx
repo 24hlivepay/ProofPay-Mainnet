@@ -5,6 +5,7 @@ import { useWalletBadge } from "../hooks/useWalletBadge";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
 import ProofPayLogo from "../components/ProofPayLogo";
+import CopyButton from "../components/CopyButton";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { connectWalletWithOptions } from "../services/wallet";
@@ -186,9 +187,12 @@ export default function SellerAccept() {
             <h1 className="text-3xl font-bold text-slate-900">Review Escrow Request</h1>
             <p className="mt-3 text-slate-600">Your seller wallet is connected. Confirm the deal details before accepting.</p>
 
-            <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-5">
-              <span className="text-slate-600">Connected seller wallet: </span>
-              <strong className="break-all text-green-700">{sellerWallet}</strong>
+            <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 p-5">
+              <div>
+                <span className="text-slate-600">Connected seller wallet: </span>
+                <strong className="break-all text-green-700">{sellerWallet}</strong>
+              </div>
+              <CopyButton value={sellerWallet} />
             </div>
 
             <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
@@ -207,6 +211,7 @@ export default function SellerAccept() {
                   label="Buyer Wallet"
                   value={escrow.buyerWallet}
                   valueClassName="font-mono text-blue-700"
+                  copyable
                 />
                 <SummaryRow label="Product / Service" value={escrow.productName} />
                 <SummaryRow label="Amount" value={escrow.amount ? `${escrow.amount} ${escrow.assetSymbol || "USDC"}` : "—"} />
@@ -228,11 +233,14 @@ export default function SellerAccept() {
   );
 }
 
-function SummaryRow({ label, value, valueClassName = "" }) {
+function SummaryRow({ label, value, valueClassName = "", copyable = false }) {
   return (
     <div className="flex items-start justify-between gap-6">
       <span className="text-slate-500">{label}</span>
-      <strong className={`break-all text-right text-slate-900 ${valueClassName}`}>{value || "—"}</strong>
+      <span className="flex items-center gap-2 text-right">
+        <strong className={`break-all text-slate-900 ${valueClassName}`}>{value || "—"}</strong>
+        {copyable && value && <CopyButton value={value} />}
+      </span>
     </div>
   );
 }

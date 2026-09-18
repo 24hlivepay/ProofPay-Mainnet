@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import InputField from "../components/InputField";
+import CopyButton from "../components/CopyButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import {
   getProfileEmail,
@@ -47,8 +48,11 @@ export default function Profile() {
         Connected Wallet
       </p>
 
-      <div className="mt-4 break-all rounded-xl border p-4 font-mono text-sm">
-        {walletAddress || "Not connected"}
+      <div className="mt-4 flex items-center gap-2 rounded-xl border p-4">
+        <span className="min-w-0 flex-1 break-all font-mono text-sm">
+          {walletAddress || "Not connected"}
+        </span>
+        {walletAddress && <CopyButton value={walletAddress} />}
       </div>
 
       <div className="mt-8 text-left">

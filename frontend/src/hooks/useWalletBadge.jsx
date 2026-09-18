@@ -9,6 +9,7 @@ import {
 import api from "../services/api";
 import { useClickOutside } from "./useClickOutside";
 import { getCurrentNetworkId } from "../config/network";
+import CopyButton from "../components/CopyButton";
 
 // The Navbar wallet badge (address + Change/Disconnect menu), shared by
 // every page so it isn't only visible on Home.jsx's dashboard. Home.jsx
@@ -87,7 +88,11 @@ export function useWalletBadge() {
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 top-10 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+        <div className="absolute right-0 top-10 z-10 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-600">{walletAddress}</span>
+            <CopyButton value={walletAddress} />
+          </div>
           <button
             onClick={() => {
               setMenuOpen(false);

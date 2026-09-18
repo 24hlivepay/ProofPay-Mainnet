@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
+import CopyButton from "../components/CopyButton";
 import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
 import { fundEscrow } from "../services/proofpayContract";
@@ -158,12 +159,12 @@ export default function BuyerDeposit() {
             <h2 className="mb-6 text-2xl font-bold">Escrow Summary</h2>
             <div className="space-y-4">
               <SummaryRow label="Buyer" value={escrowData.buyerName} />
-              <SummaryRow label="Buyer wallet" value={escrowData.buyerWallet} />
+              <SummaryRow label="Buyer wallet" value={escrowData.buyerWallet} copyable />
               {verified && <SummaryRow label="Seller" value={escrowData.sellerName} />}
               {verified && escrowData.sellerEmail && (
                 <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
               )}
-              <SummaryRow label="Seller wallet" value={escrowData.sellerWallet} />
+              <SummaryRow label="Seller wallet" value={escrowData.sellerWallet} copyable />
               <SummaryRow label="Product / Service" value={escrowData.productName} />
               <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />
               <SummaryRow label="Escrow ID" value={escrowData.escrowId} />
@@ -227,11 +228,14 @@ export default function BuyerDeposit() {
   );
 }
 
-function SummaryRow({ label, value }) {
+function SummaryRow({ label, value, copyable = false }) {
   return (
     <div className="flex gap-6 justify-between">
       <span className="text-slate-500">{label}</span>
-      <strong className="break-all text-right">{value || "—"}</strong>
+      <span className="flex items-center gap-2 text-right">
+        <strong className="break-all">{value || "—"}</strong>
+        {copyable && value && <CopyButton value={value} />}
+      </span>
     </div>
   );
 }

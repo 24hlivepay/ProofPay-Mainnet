@@ -11,6 +11,7 @@ import { getLiveContractStats } from "../services/proofpayContract";
 import api from "../services/api";
 import { getCurrentNetworkId, getNetworkConfig } from "../config/network";
 import { useClickOutside } from "../hooks/useClickOutside";
+import CopyButton from "../components/CopyButton";
 
 const EMPTY_COUNTS = { pending: 0, active: 0, completed: 0, cancelled: 0, disputes: 0 };
 const EMPTY_STATS = {
@@ -261,7 +262,11 @@ export default function Home() {
       </button>
 
       {walletMenuOpen && (
-        <div className="absolute right-0 top-10 z-10 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+        <div className="absolute right-0 top-10 z-10 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-600">{walletAddress}</span>
+            <CopyButton value={walletAddress} />
+          </div>
           <button
             onClick={() => {
               setWalletMenuOpen(false);

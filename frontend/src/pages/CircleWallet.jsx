@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
+import CopyButton from "../components/CopyButton";
 import { sendCircleToken } from "../services/circleTransactions";
 import {
   connectWallet,
@@ -352,9 +353,12 @@ export default function CircleWallet() {
 
         <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="min-w-0 break-all rounded-lg bg-black/10 px-3 py-2 font-mono text-xs text-blue-50">
-              {address}
-            </p>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-black/10 px-3 py-2">
+              <p className="min-w-0 flex-1 break-all font-mono text-xs text-blue-50">
+                {address}
+              </p>
+              <CopyButton value={address} variant="light" />
+            </div>
             <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold">
               {getNetworkConfig().chainName}
             </span>
