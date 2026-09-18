@@ -183,6 +183,9 @@ export default function ActiveOrders() {
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900">{order.escrowId}</h2>
                   <p className="mt-2 text-slate-600">{order.productName || "Escrow transaction"}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                    {isSellerRole ? "Buyer" : "Seller"}: {(isSellerRole ? order.buyerName : order.sellerName) || "—"}
+                  </p>
                 </div>
                 <span className={`rounded-full px-4 py-2 text-sm font-bold ${
                   deliveryConfirmed
@@ -214,8 +217,7 @@ export default function ActiveOrders() {
                 </div>
               )}
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Detail label={isSellerRole ? "Buyer" : "Seller"} value={isSellerRole ? order.buyerName : order.sellerName} />
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
                 <Detail label="Amount" value={`${order.amount} ${order.assetSymbol || "USDC"}`} />
                 <Detail label="Created" value={formatDate(order.createdAt)} />
                 <Detail
