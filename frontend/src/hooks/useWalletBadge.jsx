@@ -88,7 +88,7 @@ export function useWalletBadge() {
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 top-10 z-10 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
+        <div className="absolute right-0 top-10 z-10 w-full overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-xl">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
             <span className="font-mono text-sm text-slate-700">{shortWallet}</span>
             <CopyButton value={walletAddress} />
