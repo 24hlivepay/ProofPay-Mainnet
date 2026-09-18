@@ -15,6 +15,7 @@ import {
 } from "../services/wallet";
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
 import { getProfileEmail, getProfileName } from "../utils/profile";
+import { shortenAddress } from "../utils/address";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -222,7 +223,7 @@ export default function CreateEscrow() {
             <div className="space-y-2">
               <InfoRow label="Name" value={buyerName} />
               <InfoRow label="Email" value={buyerEmail} />
-              <InfoRow label="Wallet" value={walletAddress} copyable />
+              <InfoRow label="Wallet" value={shortenAddress(walletAddress)} copyValue={walletAddress} copyable />
             </div>
           </div>
 
@@ -302,13 +303,13 @@ export default function CreateEscrow() {
   );
 }
 
-function InfoRow({ label, value, copyable = false }) {
+function InfoRow({ label, value, copyValue, copyable = false }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
       <span className="text-sm text-slate-500">{label}</span>
       <span className="flex items-center gap-2">
         <strong className="break-all text-right text-sm text-slate-900">{value || "—"}</strong>
-        {copyable && value && <CopyButton value={value} />}
+        {copyable && copyValue && <CopyButton value={copyValue} />}
       </span>
     </div>
   );

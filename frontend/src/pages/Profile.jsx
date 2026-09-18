@@ -10,6 +10,7 @@ import {
   setProfileEmail,
   setProfileName,
 } from "../utils/profile";
+import { shortenAddress } from "../utils/address";
 
 export default function Profile() {
   const { walletSlot, walletAddress } = useWalletBadge();
@@ -48,9 +49,9 @@ export default function Profile() {
         Connected Wallet
       </p>
 
-      <div className="mt-4 flex items-center gap-2 rounded-xl border p-4">
-        <span className="min-w-0 flex-1 break-all font-mono text-sm">
-          {walletAddress || "Not connected"}
+      <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border p-4">
+        <span className="font-mono text-sm">
+          {walletAddress ? shortenAddress(walletAddress) : "Not connected"}
         </span>
         {walletAddress && <CopyButton value={walletAddress} />}
       </div>

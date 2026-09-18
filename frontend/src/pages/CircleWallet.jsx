@@ -15,6 +15,7 @@ import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
 import { getEscrowAssets } from "../config/escrowAssets";
 import { getCurrentNetworkId, getExplorerTxUrl, getNetworkConfig } from "../config/network";
+import { shortenAddress } from "../utils/address";
 
 const CIRCLE_FAUCET_URL = "https://faucet.circle.com/?allow=true";
 const ERC20_ABI = [
@@ -353,9 +354,9 @@ export default function CircleWallet() {
 
         <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-black/10 px-3 py-2">
-              <p className="min-w-0 flex-1 break-all font-mono text-xs text-blue-50">
-                {address}
+            <div className="flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2">
+              <p className="font-mono text-xs text-blue-50">
+                {shortenAddress(address)}
               </p>
               <CopyButton value={address} variant="light" />
             </div>

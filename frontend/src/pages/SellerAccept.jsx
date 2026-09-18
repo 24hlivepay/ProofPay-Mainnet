@@ -17,6 +17,7 @@ import {
   setProfileEmail,
   setProfileName,
 } from "../utils/profile";
+import { shortenAddress } from "../utils/address";
 
 export default function SellerAccept() {
   const { walletSlot } = useWalletBadge();
@@ -190,7 +191,7 @@ export default function SellerAccept() {
             <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-green-200 bg-green-50 p-5">
               <div>
                 <span className="text-slate-600">Connected seller wallet: </span>
-                <strong className="break-all text-green-700">{sellerWallet}</strong>
+                <strong className="text-green-700">{shortenAddress(sellerWallet)}</strong>
               </div>
               <CopyButton value={sellerWallet} />
             </div>
@@ -210,7 +211,8 @@ export default function SellerAccept() {
                 <SummaryRow label="Buyer email" value={escrow.buyerEmail} />
                 <SummaryRow
                   label="Buyer Wallet"
-                  value={escrow.buyerWallet}
+                  value={shortenAddress(escrow.buyerWallet)}
+                  copyValue={escrow.buyerWallet}
                   valueClassName="font-mono text-blue-700"
                   copyable
                 />
@@ -234,13 +236,13 @@ export default function SellerAccept() {
   );
 }
 
-function SummaryRow({ label, value, valueClassName = "", copyable = false }) {
+function SummaryRow({ label, value, valueClassName = "", copyValue, copyable = false }) {
   return (
     <div className="flex items-start justify-between gap-6">
       <span className="text-slate-500">{label}</span>
       <span className="flex items-center gap-2 text-right">
         <strong className={`break-all text-slate-900 ${valueClassName}`}>{value || "—"}</strong>
-        {copyable && value && <CopyButton value={value} />}
+        {copyable && copyValue && <CopyButton value={copyValue} />}
       </span>
     </div>
   );
