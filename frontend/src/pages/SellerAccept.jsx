@@ -207,7 +207,7 @@ export default function SellerAccept() {
             <div className="mt-6 rounded-xl border border-slate-200 p-5 sm:p-6">
               <div className="space-y-4">
                 <SummaryRow label="Buyer" value={escrow.buyerName} />
-                {escrow.buyerEmail && <SummaryRow label="Buyer email" value={escrow.buyerEmail} />}
+                <SummaryRow label="Buyer email" value={escrow.buyerEmail} />
                 <SummaryRow
                   label="Buyer Wallet"
                   value={escrow.buyerWallet}

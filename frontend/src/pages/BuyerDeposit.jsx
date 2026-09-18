@@ -159,14 +159,10 @@ export default function BuyerDeposit() {
             <h2 className="mb-6 text-2xl font-bold">Escrow Summary</h2>
             <div className="space-y-4">
               <SummaryRow label="Buyer" value={escrowData.buyerName} />
-              {escrowData.buyerEmail && (
-                <SummaryRow label="Buyer email" value={escrowData.buyerEmail} />
-              )}
+              <SummaryRow label="Buyer email" value={escrowData.buyerEmail} />
               <SummaryRow label="Buyer wallet" value={escrowData.buyerWallet} copyable />
-              {escrowData.sellerName && <SummaryRow label="Seller" value={escrowData.sellerName} />}
-              {escrowData.sellerEmail && (
-                <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
-              )}
+              <SummaryRow label="Seller" value={escrowData.sellerName} />
+              <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
               <SummaryRow label="Seller wallet" value={escrowData.sellerWallet} copyable />
               <SummaryRow label="Product / Service" value={escrowData.productName} />
               <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />

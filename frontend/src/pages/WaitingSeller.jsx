@@ -264,12 +264,10 @@ export default function WaitingSeller() {
                 <strong>{escrowData.buyerName}</strong>
               </div>
 
-              {escrowData.buyerEmail && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Buyer Email</span>
-                  <strong>{escrowData.buyerEmail}</strong>
-                </div>
-              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">Buyer Email</span>
+                <strong>{escrowData.buyerEmail || "—"}</strong>
+              </div>
 
               <div className="flex justify-between">
                 <span className="text-slate-500">Product / Service</span>
