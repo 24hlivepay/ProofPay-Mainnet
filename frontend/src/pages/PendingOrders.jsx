@@ -136,15 +136,15 @@ export default function PendingOrders() {
             <article key={order.escrowId} className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">{order.escrowId}</h2>
-                  <p className="mt-2 text-slate-600">{order.productName || "Escrow transaction"}</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                  <p className="text-lg font-bold text-slate-900">
                     {isSellerRole ? "Buyer" : "Seller"}: {(isSellerRole ? order.buyerName : order.sellerName) || "—"}
                   </p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-900">{order.escrowId}</h2>
                 </div>
                 <span className="rounded-full bg-orange-100 px-4 py-2 text-sm font-bold text-orange-700">{order.status}</span>
               </div>
-              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Detail label="Product / Service" value={order.productName || "Escrow transaction"} />
                 <Detail label="Amount" value={`${order.amount} ${order.assetSymbol || "USDC"}`} />
                 <Detail label="Created" value={new Date(order.createdAt).toLocaleDateString()} />
                 <CountdownDetail order={order} now={now} />

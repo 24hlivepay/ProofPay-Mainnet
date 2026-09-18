@@ -44,18 +44,18 @@ function OrderCard({ order, seller, onViewDispute }) {
     <article className={`rounded-2xl border bg-white p-5 shadow-sm ${resolution ? "border-amber-200" : "border-green-200"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">{order.escrowId}</h2>
-          <p className="mt-2 text-slate-600">{order.productName || "Escrow transaction"}</p>
-          <p className="mt-1 text-sm font-semibold text-slate-700">
+          <p className="text-lg font-bold text-slate-900">
             {seller ? "Buyer" : "Seller"}: {(seller ? order.buyerName : order.sellerName) || "—"}
           </p>
+          <h2 className="mt-1 text-lg font-bold text-slate-900">{order.escrowId}</h2>
         </div>
         <span className={`rounded-full px-4 py-2 text-sm font-bold ${resolution ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
           {resolution ? "Resolved by ProofPay admin" : seller ? "Payment Received" : "Payment Released"}
         </span>
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Detail label="Product / Service" value={order.productName || "Escrow transaction"} />
         <Detail label={seller ? "Amount received" : "Amount paid"} value={`${order.amount} ${order.assetSymbol || "USDC"}`} />
         <Detail label="Created" value={formatDate(order.createdAt)} />
         <Detail label="Completed" value={formatDate(order.releasedAt || resolution?.resolvedAt)} />
