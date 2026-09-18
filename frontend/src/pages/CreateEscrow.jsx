@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import InputField from "../components/InputField";
 import PrimaryButton from "../components/PrimaryButton";
+import CopyButton from "../components/CopyButton";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import {
@@ -13,7 +14,7 @@ import {
   getWalletSession,
 } from "../services/wallet";
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
-import { getProfileEmail, getProfileName, setProfileName } from "../utils/profile";
+import { getProfileEmail, getProfileName } from "../utils/profile";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -37,12 +38,11 @@ export default function CreateEscrow() {
   const { walletSlot, walletAddress } = useWalletBadge();
   const navigate = useNavigate();
   const { setEscrowData } = useEscrow();
-  const [buyerName, setBuyerName] = useState("");
-  const [buyerEmail, setBuyerEmail] = useState("");
+  const [buyerName, setBuyerName] = useState(() => getProfileName(walletAddress));
+  const [buyerEmail, setBuyerEmail] = useState(() => getProfileEmail(walletAddress));
 
   useEffect(() => {
-    const savedName = getProfileName(walletAddress);
-    if (savedName) setBuyerName((current) => current || savedName);
+    setBuyerName(getProfileName(walletAddress));
     setBuyerEmail(getProfileEmail(walletAddress));
   }, [walletAddress]);
   const [productName, setProductName] = useState("");
@@ -150,7 +150,6 @@ export default function CreateEscrow() {
       setSubmitting(true);
       setError("");
       const { address: buyerWallet } = await connectWallet();
-      setProfileName(buyerWallet, buyerName);
       const response = await api.post("/escrow", {
         buyerName,
         buyerWallet,
@@ -174,6 +173,31 @@ export default function CreateEscrow() {
     }
   }
 
+  if (!buyerName) {
+    return (
+      <div className="min-h-screen bg-slate-100">
+        <Navbar walletSlot={walletSlot} />
+        <main className="mx-auto max-w-lg px-5 py-10 text-center sm:px-6">
+          <div className="rounded-2xl border border-amber-200 bg-white p-7 shadow-sm">
+            <div className="text-4xl">👤</div>
+            <h1 className="mt-4 text-2xl font-bold text-slate-900">Complete your profile first</h1>
+            <p className="mt-3 text-slate-600">
+              {walletAddress
+                ? "Add your name to your ProofPay profile before creating an escrow. It's used as your Buyer Name on every deal from here on."
+                : "Connect your wallet and add your name to your ProofPay profile before creating an escrow."}
+            </p>
+            <button
+              onClick={() => navigate("/profile")}
+              className="mt-7 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700"
+            >
+              Go to Profile
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
@@ -189,10 +213,22 @@ export default function CreateEscrow() {
           </p>
 
           <div className="mt-5 rounded-xl border p-4 sm:p-5">
-            <h2 className="mb-4 text-lg font-bold">Buyer Information</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Buyer Information</h2>
+              <button type="button" onClick={() => navigate("/profile")} className="text-sm font-semibold text-blue-600 hover:text-blue-700">
+                Edit in Profile
+              </button>
+            </div>
+            <div className="space-y-2">
+              <InfoRow label="Name" value={buyerName} />
+              <InfoRow label="Email" value={buyerEmail} />
+              <InfoRow label="Wallet" value={walletAddress} copyable />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border p-4 sm:p-5">
+            <h2 className="mb-4 text-lg font-bold">Product Information</h2>
             <div className="space-y-3">
-              <InputField placeholder="Buyer Name" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} />
-              {buyerEmail && <p className="-mt-1 px-1 text-sm text-slate-500">Email: {buyerEmail}</p>}
               <InputField placeholder="Product / Service Name" value={productName} onChange={(event) => setProductName(event.target.value)} />
               <InputField placeholder="Product ID (Optional)" value={productId} onChange={(event) => setProductId(event.target.value)} />
               <div className="overflow-hidden rounded-xl border border-slate-300 bg-white transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
@@ -262,6 +298,18 @@ export default function CreateEscrow() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, copyable = false }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="flex items-center gap-2">
+        <strong className="break-all text-right text-sm text-slate-900">{value || "—"}</strong>
+        {copyable && value && <CopyButton value={value} />}
+      </span>
     </div>
   );
 }
