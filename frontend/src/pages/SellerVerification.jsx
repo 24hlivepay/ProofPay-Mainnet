@@ -7,6 +7,8 @@ import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
 import { confirmDeliveryOnChain } from "../services/proofpayContract";
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
+import CopyButton from "../components/CopyButton";
+import { shortenAddress } from "../utils/address";
 
 export default function SellerVerification() {
   const { walletSlot } = useWalletBadge();
@@ -119,6 +121,23 @@ export default function SellerVerification() {
         <button onClick={() => navigate(sellerBack.path, { state: sellerBack.state })} className="mb-8 font-semibold text-blue-600 hover:text-blue-700">
           ← {sellerBack.label}
         </button>
+
+        {escrowData.escrowId && (
+          <div className="mb-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="mb-4 text-lg font-bold">Escrow Summary</h2>
+            <div className="space-y-3">
+              <SummaryRow label="Buyer" value={escrowData.buyerName} />
+              <SummaryRow label="Buyer email" value={escrowData.buyerEmail} />
+              <SummaryRow label="Buyer wallet" value={shortenAddress(escrowData.buyerWallet)} copyValue={escrowData.buyerWallet} copyable />
+              <SummaryRow label="Seller" value={escrowData.sellerName} />
+              <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
+              <SummaryRow label="Seller wallet" value={shortenAddress(escrowData.sellerWallet)} copyValue={escrowData.sellerWallet} copyable />
+              <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />
+              <SummaryRow label="Escrow ID" value={escrowData.escrowId} />
+            </div>
+          </div>
+        )}
+
         {content}
       </main>
     </div>
@@ -143,6 +162,18 @@ function getSellerBackDestination(status) {
   }
 
   return { path: "/dashboard/selling", state: undefined, label: "Back to Selling Escrows" };
+}
+
+function SummaryRow({ label, value, copyValue, copyable = false }) {
+  return (
+    <div className="flex gap-6 justify-between">
+      <span className="text-slate-500">{label}</span>
+      <span className="flex items-center gap-2 text-right">
+        <strong className="break-all">{value || "—"}</strong>
+        {copyable && copyValue && <CopyButton value={copyValue} />}
+      </span>
+    </div>
+  );
 }
 
 function StatusCard({ title, message, error = false }) {
