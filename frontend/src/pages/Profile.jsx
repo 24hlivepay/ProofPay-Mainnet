@@ -29,7 +29,7 @@ export default function Profile() {
     setProfileName(walletAddress, name);
     setProfileEmail(walletAddress, email);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => navigate("/dashboard"), 900);
   }
 
   return (
@@ -87,6 +87,11 @@ export default function Profile() {
         >
           {saved ? "Saved ✓" : "Save Profile"}
         </button>
+        {saved && (
+          <p className="mt-3 rounded-xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">
+            ✓ Profile saved — taking you back home...
+          </p>
+        )}
       </div>
 
       <button
