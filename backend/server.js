@@ -1347,6 +1347,44 @@ app.post("/api/escrow/:id/dispute/response", async (req, res) => {
   }
 });
 
+const MAX_DISPUTE_MESSAGES = 200;
+
+function addDisputeMessage(escrow, from, wallet, text) {
+  const clean = String(text || "").trim().slice(0, 2000);
+  if (!clean) return false;
+  escrow.dispute.messages = escrow.dispute.messages || [];
+  if (escrow.dispute.messages.length >= MAX_DISPUTE_MESSAGES) return false;
+  escrow.dispute.messages.push({
+    from,
+    wallet: String(wallet).toLowerCase(),
+    text: clean,
+    sentAt: Date.now(),
+  });
+  return true;
+}
+
+app.post("/api/escrow/:id/dispute/message", async (req, res) => {
+  const { wallet, text } = req.body || {};
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
+  if (!isEscrowParticipant(escrow, wallet)) return res.status(403).json({ success: false, message: "Only escrow participants can send messages." });
+  if (!addDisputeMessage(escrow, participantSide(escrow, wallet), wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
+  await saveEscrows(allEscrows);
+  return res.json({ success: true, escrow });
+});
+
+app.post("/api/admin/disputes/:id/message", async (req, res) => {
+  const { wallet, text } = req.body || {};
+  if (!isDisputeAdmin(wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
+  if (!addDisputeMessage(escrow, "admin", wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
+  await saveEscrows(allEscrows);
+  return res.json({ success: true, escrow });
+});
+
 app.get("/api/escrow/:id/dispute", async (req, res) => {
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
@@ -1394,7 +1432,6 @@ app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
   const { wallet, buyerAmount, transactionHash, note } = req.body || {};
   if (!isDisputeAdmin(wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
   if (!/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) return res.status(400).json({ success: false, message: "A confirmed on-chain resolution transaction is required." });
-  if (!String(note || "").trim()) return res.status(400).json({ success: false, message: "Explain the resolution so both sides can see the reasoning." });
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
@@ -1404,7 +1441,7 @@ app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
     buyerAmount: String(buyerAmount),
     sellerAmount: String(Number(escrow.amount) - Number(buyerAmount)),
     transactionHash,
-    note: String(note).trim().slice(0, 2000),
+    note: String(note || "").trim().slice(0, 2000),
     resolvedAt: Date.now(),
     resolvedBy: String(wallet).toLowerCase(),
   };
