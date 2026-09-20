@@ -8,7 +8,7 @@ import ProofPayLogo from "../components/ProofPayLogo";
 import CopyButton from "../components/CopyButton";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
-import { connectWalletWithOptions } from "../services/wallet";
+import { connectWalletWithOptions, getWalletSession } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { getExplorerAddressUrl, getNetworkConfig } from "../config/network";
 import {
@@ -28,7 +28,13 @@ export default function SellerAccept() {
   const [sellerDisplayName, setSellerDisplayName] = useState("");
   const [sellerEmail, setSellerEmail] = useState("");
   const [loading, setLoading] = useState(true);
-  const [reviewing, setReviewing] = useState(false);
+  const circleAddress =
+    localStorage.getItem("proofpay-wallet-type") === "circle"
+      ? getWalletSession()?.address || ""
+      : "";
+  const [reviewing, setReviewing] = useState(
+    () => Boolean(circleAddress) && sessionStorage.getItem("proofpay-invite-resume") === id
+  );
   const [connecting, setConnecting] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState("");
@@ -72,6 +78,12 @@ export default function SellerAccept() {
     } finally {
       setConnecting(false);
     }
+  }
+
+  function signInWithEmail() {
+    sessionStorage.setItem("proofpay-post-login-route", `/escrow/${id}`);
+    sessionStorage.setItem("proofpay-invite-resume", id);
+    navigate("/login");
   }
 
   async function handleAcceptDeal() {
@@ -177,10 +189,24 @@ export default function SellerAccept() {
             <h1 className="mt-4 text-3xl font-bold text-slate-900">Connect seller wallet</h1>
             <p className="mx-auto mt-4 max-w-lg text-slate-600">Connect and sign a ProofPay message to confirm this wallet belongs to the seller. No funds will move.</p>
             {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-left text-red-700">{error}</p>}
-            <div className="mx-auto mt-7 max-w-md">
-              <PrimaryButton onClick={handleConnectWallet} disabled={connecting}>
-                {connecting ? "Connecting Wallet..." : "Connect with Wallet"}
-              </PrimaryButton>
+            <div className="mx-auto mt-7 max-w-md space-y-3">
+              {circleAddress ? (
+                <PrimaryButton onClick={handleConnectWallet} disabled={connecting}>
+                  {connecting ? "Connecting Wallet..." : `Continue with Circle wallet (${shortenAddress(circleAddress)})`}
+                </PrimaryButton>
+              ) : (
+                <>
+                  <PrimaryButton onClick={handleConnectWallet} disabled={connecting}>
+                    {connecting ? "Connecting Wallet..." : "Connect MetaMask / Rabby"}
+                  </PrimaryButton>
+                  <button
+                    onClick={signInWithEmail}
+                    className="w-full rounded-xl border border-slate-300 py-4 font-semibold text-slate-800 transition hover:bg-slate-50"
+                  >
+                    Sign in with Email (Circle wallet)
+                  </button>
+                </>
+              )}
             </div>
           </section>
         ) : (

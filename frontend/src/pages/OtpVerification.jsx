@@ -117,7 +117,9 @@ export default function OtpVerification() {
 
       saveWalletSession(wallet, auth);
       setStatus("Wallet ready. Opening ProofPay...");
-      navigate("/dashboard");
+      const resumeRoute = sessionStorage.getItem("proofpay-post-login-route");
+      sessionStorage.removeItem("proofpay-post-login-route");
+      navigate(resumeRoute || "/dashboard");
     } catch (verificationError) {
       setStatus("");
       setError(
