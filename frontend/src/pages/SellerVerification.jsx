@@ -132,6 +132,7 @@ export default function SellerVerification() {
               <SummaryRow label="Seller" value={escrowData.sellerName} />
               <SummaryRow label="Seller email" value={escrowData.sellerEmail} />
               <SummaryRow label="Seller wallet" value={shortenAddress(escrowData.sellerWallet)} copyValue={escrowData.sellerWallet} copyable />
+              <SummaryRow label="Product / Service" value={escrowData.productName} />
               <SummaryRow label="Amount" value={`${escrowData.amount} ${escrowData.assetSymbol || "USDC"}`} />
               <SummaryRow label="Escrow ID" value={escrowData.escrowId} />
             </div>
