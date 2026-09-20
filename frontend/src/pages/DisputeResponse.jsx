@@ -115,6 +115,7 @@ export default function DisputeResponse() {
         <DisputeThread
           messages={dispute.messages}
           onSend={resolution ? undefined : sendMessage}
+          collapseAfter={resolution ? 3 : undefined}
           placeholder="Reply to ProofPay admin or the other party."
         />
       )}

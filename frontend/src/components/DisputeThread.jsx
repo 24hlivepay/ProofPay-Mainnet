@@ -10,8 +10,11 @@ function formatTime(timestamp) {
   return new Date(timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
-export default function DisputeThread({ messages = [], onSend, placeholder, sendLabel = "Send message" }) {
+export default function DisputeThread({ messages = [], onSend, placeholder, sendLabel = "Send message", collapseAfter }) {
   const [text, setText] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const canCollapse = Number.isFinite(collapseAfter) && messages.length > collapseAfter;
+  const visibleMessages = canCollapse && !expanded ? messages.slice(0, collapseAfter) : messages;
   const [sending, setSending] = useState(false);
 
   async function handleSend() {
@@ -33,7 +36,7 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
         <p className="mt-2 text-sm text-slate-500">No messages yet.</p>
       ) : (
         <ul className="mt-2 space-y-2">
-          {messages.map((message, index) => {
+          {visibleMessages.map((message, index) => {
             const style = SENDER_STYLES[message.from] || SENDER_STYLES.buyer;
 
             return (
@@ -47,6 +50,16 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
             );
           })}
         </ul>
+      )}
+
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          className="mt-2 text-sm font-semibold text-blue-700 hover:text-blue-800"
+        >
+          {expanded ? "See less" : `See more (${messages.length - collapseAfter} more)`}
+        </button>
       )}
 
       {onSend && (

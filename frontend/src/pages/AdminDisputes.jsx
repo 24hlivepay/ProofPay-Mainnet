@@ -51,6 +51,8 @@ function ResolvedCase({ escrow, wallet }) {
 
     {evidence.length > 0 && <><h3 className="mt-4 font-bold">Private evidence</h3><ul className="mt-2 text-sm">{evidence.map((file) => <li key={file.id}><a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={`${API_BASE_URL}/escrow/${escrow.escrowId}/dispute/evidence/${file.id}?wallet=${encodeURIComponent(wallet)}`}>{file.side}: {file.name}</a></li>)}</ul></>}
 
+    {(dispute.messages || []).length > 0 && <DisputeThread messages={dispute.messages} collapseAfter={3} />}
+
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
       <p className="font-bold text-green-900">Admin decision</p>
       {resolution.note && <p className="mt-2 whitespace-pre-wrap text-sm text-green-800">{resolution.note}</p>}
