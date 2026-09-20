@@ -38,7 +38,11 @@ export default function Dispute() {
       setStatus("Preparing evidence...");
       const preparedFiles = await readFiles(files);
       setStatus("Confirm the dispute transaction in your wallet. Funds remain in escrow.");
-      const transactionHash = await openDisputeOnChain(order.escrowId, order.assetSymbol);
+      const isBuyer = getConnectedWallet()?.toLowerCase() === order.buyerWallet?.toLowerCase();
+      const transactionHash = await openDisputeOnChain(order.escrowId, order.assetSymbol, {
+        side: isBuyer ? "Buyer" : "Seller",
+        name: isBuyer ? order.buyerName : order.sellerName,
+      });
       setStatus("Saving private evidence...");
       await api.post(`/escrow/${order.escrowId}/dispute`, {
         wallet: getConnectedWallet(), reason, statement, files: preparedFiles, transactionHash,

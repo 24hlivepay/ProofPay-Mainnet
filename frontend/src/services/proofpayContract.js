@@ -705,6 +705,21 @@ export async function refundOnChain(escrowId, assetSymbol = "USDC") {
       contractAddress: asset.escrowAddress,
       abiFunctionSignature: "refund(string)",
       abiParameters: [escrowId],
+      display: {
+        title: "Refund Escrow",
+        subtitle: `Return the locked ${asset.symbol} to the buyer.`,
+        amount: "0",
+        symbol: asset.symbol,
+        fromLabel: "Your wallet",
+        from: localStorage.getItem("proofpay-wallet"),
+        contractLabel: "Verified contract",
+        contractName: "ProofPay Escrow",
+        totalLabel: "Action",
+        total: `Refund locked ${asset.symbol} to buyer`,
+        confirmLabel: "Confirm Refund",
+        action: "Refund escrow",
+        details: [`Escrow ID: ${escrowId}`, `Network: ${getNetworkConfig().chainName}`],
+      },
     });
     return transaction.hash;
   }
@@ -719,13 +734,36 @@ export async function refundOnChain(escrowId, assetSymbol = "USDC") {
   }
 }
 
-export async function openDisputeOnChain(escrowId, assetSymbol = "USDC") {
+export async function openDisputeOnChain(escrowId, assetSymbol = "USDC", opener = {}) {
   const asset = getEscrowAsset(assetSymbol);
   if (isCircleWallet()) {
+    const side = opener.side || "Participant";
+    const who = opener.name ? `${side} (${opener.name})` : side;
     const transaction = await executeCircleProofPay({
       contractAddress: asset.escrowAddress,
       abiFunctionSignature: "openDispute(string)",
       abiParameters: [escrowId],
+      display: {
+        title: "Open Dispute",
+        subtitle:
+          `Dispute opened by the ${who}. The locked ${asset.symbol} stays frozen in escrow until ProofPay admin resolves it.`,
+        amount: "0",
+        symbol: asset.symbol,
+        fromLabel: `Dispute opened by ${side.toLowerCase()}`,
+        from: opener.name || localStorage.getItem("proofpay-wallet"),
+        contractLabel: "Verified contract",
+        contractName: "ProofPay Escrow",
+        totalLabel: "Funds moved",
+        total: `0 ${asset.symbol} — funds frozen, none released`,
+        confirmLabel: "Open Dispute",
+        action: "Open dispute",
+        details: [
+          `Escrow ID: ${escrowId}`,
+          `Network: ${getNetworkConfig().chainName}`,
+          `Opened by: ${who}`,
+          `Locked ${asset.symbol}: Frozen until admin resolves`,
+        ],
+      },
     });
     return transaction.hash;
   }
@@ -753,6 +791,21 @@ export async function resolveDisputeOnChain(escrowId, buyerAmount, assetSymbol =
       contractAddress: asset.escrowAddress,
       abiFunctionSignature: "resolveDispute(string,uint256)",
       abiParameters: [escrowId, buyerAmountUnits.toString()],
+      display: {
+        title: "Resolve Dispute",
+        subtitle: `Admin decision: ${buyerAmount} ${asset.symbol} to the buyer, the remainder to the seller.`,
+        amount: "0",
+        symbol: asset.symbol,
+        fromLabel: "ProofPay admin wallet",
+        from: localStorage.getItem("proofpay-wallet"),
+        contractLabel: "Verified contract",
+        contractName: "ProofPay Escrow",
+        totalLabel: "Buyer receives",
+        total: `${buyerAmount} ${asset.symbol}`,
+        confirmLabel: "Confirm Resolution",
+        action: "Resolve dispute",
+        details: [`Escrow ID: ${escrowId}`, `Network: ${getNetworkConfig().chainName}`],
+      },
     });
     return transaction.hash;
   }
