@@ -7,6 +7,18 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import pg from "pg";
+import { ethers } from "ethers";
+import {
+  CHAIN_STATUS,
+  makeProvider,
+  fetchOnChainEscrow,
+  generateVerificationCode,
+  getVerifyState,
+  incrementVerifyAttempts,
+  resetVerifyAttempts,
+  VERIFY_MAX_ATTEMPTS,
+  VERIFY_LOCKOUT_MS,
+} from "./lib/hardening.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -16,12 +28,19 @@ validateCircleConfig();
 
 const app = express();
 
+// PR-4 note: the *.vercel.app wildcard below is intentionally kept until the
+// CORS-hardening PR ships. It will be replaced with a pattern scoped to the
+// "proof-pay" Vercel project name (preview URLs use the project name, not the
+// repo slug). Production traffic uses same-origin /api calls so CORS only
+// matters for localhost dev and Vercel preview branches.
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://proofpay.online",
   "https://www.proofpay.online",
   process.env.FRONTEND_URL,
+  // VERCEL_URL is set automatically by Vercel for each deployment
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
 ].filter(Boolean);
 
 app.use(cors({
@@ -127,19 +146,43 @@ async function ensureDatabase() {
   if (!databasePool) return;
 
   if (!databaseReady) {
-    databaseReady = databasePool.query(`
-      CREATE TABLE IF NOT EXISTS proofpay_records (
-        record_type TEXT NOT NULL,
-        record_id TEXT NOT NULL,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (record_type, record_id)
-      )
-    `);
+    databaseReady = (async () => {
+      await databasePool.query(`
+        CREATE TABLE IF NOT EXISTS proofpay_records (
+          record_type TEXT NOT NULL,
+          record_id TEXT NOT NULL,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (record_type, record_id)
+        )
+      `);
+      // PR-1: per-escrow verify-seller attempt counters — Postgres-backed so
+      // they survive Vercel cold starts (no in-memory Map).
+      // locked_until: NULL means not locked; a timestamp means locked until then.
+      await databasePool.query(`
+        CREATE TABLE IF NOT EXISTS proofpay_verify_attempts (
+          escrow_id    TEXT PRIMARY KEY,
+          attempts     INTEGER NOT NULL DEFAULT 0,
+          locked_until TIMESTAMPTZ,
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      // Safe migration: add locked_until if an older deployment created the
+      // table without it (ALTER TABLE ... ADD COLUMN IF NOT EXISTS is idempotent).
+      await databasePool.query(`
+        ALTER TABLE proofpay_verify_attempts
+          ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ
+      `);
+    })();
   }
 
   await databaseReady;
 }
+
+// RPC provider, on-chain helpers, CHAIN_STATUS, and verify-seller lockout
+// helpers are all imported from ./lib/hardening.js above.
+// server.js uses makeProvider as getArcProvider for compatibility.
+const getArcProvider = makeProvider;
 
 async function loadEscrows() {
   try {
@@ -889,9 +932,9 @@ app.post("/api/escrow", async (req, res) => {
     });
   }
 
-  const escrowId =
-    "PP-" +
-    Math.random().toString(36).substring(2, 8).toUpperCase();
+  // PR-1: crypto-random ID — at least 10 hex chars (~40 bits entropy).
+  // Old PP-XXXXXX IDs remain valid; this only affects newly created escrows.
+  const escrowId = "PP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
 
   const escrow = {
     ...req.body,
@@ -1060,6 +1103,12 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
+// ---------------------------------------------------------------------------
+// verify-seller helpers are imported from ./lib/hardening.js.
+// The server passes databasePool, saveEscrows, and escrows (cache) as
+// arguments so hardening.js has no direct dependency on server globals.
+// ---------------------------------------------------------------------------
+
 app.post("/api/escrow/:id/verify-seller", async (req, res) => {
   const { verificationCode } = req.body || {};
   const allEscrows = await loadEscrows();
@@ -1083,18 +1132,63 @@ app.post("/api/escrow/:id/verify-seller", async (req, res) => {
     return res.json({ success: true, escrow });
   }
 
-  if (
-    !verificationCode ||
-    String(verificationCode).trim() !== String(escrow.verificationCode || "")
-  ) {
+  // PR-1 (v2): check lockout BEFORE evaluating the code so a locked caller
+  // cannot probe whether the code changed.
+  const state = await getVerifyState(req.params.id, escrow, databasePool);
+  if (state.lockedUntil && Date.now() < state.lockedUntil) {
+    const retryAfterSec = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+    return res
+      .status(429)
+      .set("Retry-After", String(retryAfterSec))
+      .json({
+        success: false,
+        message:
+          "Too many incorrect attempts. Please wait 10 minutes before trying again.",
+        retryAfterSeconds: retryAfterSec,
+      });
+  }
+
+  const submitted = String(verificationCode || "").trim();
+  const expected  = String(escrow.verificationCode || "");
+
+  if (!submitted || submitted !== expected) {
+    // Increment counter. When the limit is reached, set lockedUntil.
+    // Expired lockouts are reset inside incrementVerifyAttempts before
+    // counting the new attempt (so each 10-min window allows exactly 5 tries).
+    // Code is NOT changed — an unauthenticated caller cannot invalidate a
+    // code the seller has already shared.
+    const { attempts, lockedUntil } = await incrementVerifyAttempts(
+      req.params.id, escrow, allEscrows,
+      databasePool, saveEscrows, escrows
+    );
+
+    if (lockedUntil) {
+      console.warn(
+        `[ProofPay] verify-seller: escrow ${req.params.id} locked until ` +
+        `${new Date(lockedUntil).toISOString()} after ${attempts} failed attempts.`
+      );
+      const retryAfterSec = Math.ceil((lockedUntil - Date.now()) / 1000);
+      return res
+        .status(429)
+        .set("Retry-After", String(retryAfterSec))
+        .json({
+          success: false,
+          message:
+            "Too many incorrect attempts. Please wait 10 minutes before trying again.",
+          retryAfterSeconds: retryAfterSec,
+        });
+    }
+
     return res.status(400).json({
       success: false,
       message: "The verification code is incorrect. Please ask the seller to share it again.",
+      attemptsRemaining: VERIFY_MAX_ATTEMPTS - attempts,
     });
   }
 
   escrow.sellerVerified = true;
   escrow.sellerVerifiedAt = Date.now();
+  await resetVerifyAttempts(req.params.id, escrow, allEscrows, databasePool, saveEscrows, escrows);
 
   await saveEscrows(allEscrows);
   escrows[req.params.id] = escrow;
@@ -1120,12 +1214,10 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
 
   if (!escrow) {
-
     return res.status(404).json({
       success: false,
       message: "Escrow Not Found",
     });
-
   }
 
   if (escrow.status === "Cancelled") {
@@ -1135,23 +1227,91 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
     });
   }
 
-  if (escrow.status !== "Seller Accepted") {
+  // PR-1: idempotent recovery path — if the DB update previously failed after
+  // a confirmed on-chain deposit, allow a retry when already "Funds Locked".
+  const isRecovery = escrow.status === "Funds Locked";
+
+  if (!isRecovery && escrow.status !== "Seller Accepted") {
     return res.status(400).json({
       success: false,
       message: "The seller must accept the deal before you can deposit USDC.",
     });
   }
 
-  if (!escrow.sellerVerified) {
+  if (!isRecovery && !escrow.sellerVerified) {
     return res.status(400).json({
       success: false,
       message: "Verify the seller before depositing USDC.",
     });
   }
 
+  // PR-1: verify on-chain state before trusting this deposit notification.
+  // We check buyer, seller, amount, and status — not just the tx hash format.
+  // If the RPC is unavailable (provider not configured), we warn and allow
+  // through so live mainnet escrows are never silently blocked.
+  if (escrow.escrowContractAddress) {
+    const network = escrowNetwork(escrow);
+    const onChain = await fetchOnChainEscrow(
+      escrow.escrowContractAddress,
+      escrow.escrowId,
+      network
+    );
+
+    if (onChain !== null) {
+      // On-chain status must be Funded (1) or higher (e.g. Delivered if the
+      // seller was very fast) — not None/unfunded.
+      if (onChain.status === CHAIN_STATUS.NONE) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "The escrow is not funded on-chain yet. Wait for the blockchain " +
+            "transaction to confirm, then try again.",
+        });
+      }
+
+      // Verify the on-chain escrow participants and amount match the DB record.
+      const buyerMatch =
+        escrow.buyerWallet &&
+        onChain.buyer.toLowerCase() === escrow.buyerWallet.toLowerCase();
+      const sellerMatch =
+        escrow.sellerWallet &&
+        onChain.seller.toLowerCase() === escrow.sellerWallet.toLowerCase();
+
+      // Compare amount: DB stores human-readable (e.g. "10.00"), on-chain is
+      // in token decimals (e.g. 10_000_000n for USDC 6-decimal). Convert via
+      // the asset's decimal count stored on the record.
+      const decimals = escrow.assetDecimals ?? 6;
+      const expectedUnits = BigInt(
+        Math.round(Number(escrow.amount) * 10 ** decimals)
+      );
+      const amountMatch = onChain.amount === expectedUnits;
+
+      if (!buyerMatch || !sellerMatch || !amountMatch) {
+        console.error(
+          `[ProofPay] /deposit on-chain mismatch for ${escrow.escrowId}:`,
+          {
+            buyerMatch,
+            sellerMatch,
+            amountMatch,
+            onChainBuyer: onChain.buyer,
+            onChainSeller: onChain.seller,
+            onChainAmount: onChain.amount.toString(),
+            expectedUnits: expectedUnits.toString(),
+          }
+        );
+        return res.status(400).json({
+          success: false,
+          message:
+            "The on-chain escrow details do not match this order. " +
+            "Contact support with your escrow ID.",
+        });
+      }
+    }
+  }
+
   escrow.status = "Funds Locked";
   escrow.isPermanent = true;
-  escrow.depositedAt = Date.now();
+  if (!isRecovery) escrow.depositedAt = Date.now();
 
   if (/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) {
     escrow.depositTransactionHash = transactionHash;
@@ -1162,11 +1322,8 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
   );
 
   if (index !== -1) {
-
     allEscrows[index] = escrow;
-
     await saveEscrows(allEscrows);
-
   }
 
   escrows[req.params.id] = escrow;
@@ -1196,9 +1353,56 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
     });
   }
 
+  // PR-1: idempotent — if the on-chain tx was confirmed but the DB update
+  // was lost (dropped connection, Vercel timeout), a retry must succeed.
+  if (escrow.status === "Delivered") {
+    // Already marked; update the tx hash if we now have one and return success.
+    if (/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "") && !escrow.deliveryTransactionHash) {
+      escrow.deliveryTransactionHash = transactionHash;
+      const index = allEscrows.findIndex((e) => e.escrowId === escrow.escrowId);
+      if (index !== -1) { allEscrows[index] = escrow; await saveEscrows(allEscrows); }
+      escrows[req.params.id] = escrow;
+    }
+    return res.json({ success: true, escrow });
+  }
+
+  // PR-1 (v2): state check — only "Funds Locked" can transition to "Delivered".
+  if (escrow.status !== "Funds Locked") {
+    return res.status(400).json({
+      success: false,
+      message:
+        escrow.status === "Cancelled"
+          ? "This escrow has been cancelled and cannot be marked as delivered."
+          : escrow.status === "Disputed"
+          ? "This escrow is under dispute and cannot be marked as delivered."
+          : `Cannot mark delivery: escrow status is "${escrow.status}".`,
+    });
+  }
+
+  // PR-1 (v2): verify on-chain status >= Delivered (2) before accepting the
+  // notification. Fail-open when the RPC is unreachable so a node hiccup
+  // cannot permanently block an honest seller from completing an escrow.
+  if (escrow.escrowContractAddress) {
+    const onChain = await fetchOnChainEscrow(
+      escrow.escrowContractAddress,
+      escrow.escrowId,
+      escrowNetwork(escrow)
+    );
+    if (onChain !== null && onChain.status < CHAIN_STATUS.DELIVERED) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The delivery has not been confirmed on-chain yet. " +
+          "Wait for the transaction to be mined and try again.",
+      });
+    }
+  }
+
+  // tx hash is optional: Circle wallets occasionally return an empty string
+  // (confirmDelivery returns "" on an idempotent on-chain retry in
+  // proofpayContract.js). Store it when present, skip when absent.
   escrow.status = "Delivered";
   escrow.deliveredAt = Date.now();
-
   if (/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) {
     escrow.deliveryTransactionHash = transactionHash;
   }
@@ -1208,12 +1412,11 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
   );
 
   if (index !== -1) {
-
     allEscrows[index] = escrow;
-
     await saveEscrows(allEscrows);
-
   }
+
+  escrows[req.params.id] = escrow;
 
   res.json({
     success: true,
@@ -1236,24 +1439,47 @@ app.post("/api/escrow/:id/release", async (req, res) => {
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
 
   if (!escrow) {
-
     return res.status(404).json({
-
       success: false,
       message: "Escrow Not Found",
-
     });
-
   }
 
+  // PR-1: idempotent — a retry after a dropped DB write must succeed.
+  if (escrow.status === "Released") {
+    if (/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "") && !escrow.releaseTransactionHash) {
+      escrow.releaseTransactionHash = transactionHash;
+      const index = allEscrows.findIndex((e) => e.escrowId === escrow.escrowId);
+      if (index !== -1) { allEscrows[index] = escrow; await saveEscrows(allEscrows); }
+      escrows[req.params.id] = escrow;
+    }
+    return res.json({ success: true, escrow });
+  }
 
   if (escrow.status !== "Delivered") {
-
     return res.status(400).json({
       success: false,
       message: "Seller has not marked the order as Delivered.",
     });
+  }
 
+  // PR-1 (v2): verify on-chain status == Released (3) before recording the
+  // DB update. Fail-open when the RPC is unreachable so a node hiccup cannot
+  // permanently block an honest buyer from completing an escrow.
+  if (escrow.escrowContractAddress) {
+    const onChain = await fetchOnChainEscrow(
+      escrow.escrowContractAddress,
+      escrow.escrowId,
+      escrowNetwork(escrow)
+    );
+    if (onChain !== null && onChain.status !== CHAIN_STATUS.RELEASED) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The release has not been confirmed on-chain yet. " +
+          "Wait for the transaction to be mined and try again.",
+      });
+    }
   }
 
   escrow.status = "Released";
@@ -1432,9 +1658,66 @@ app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
   const { wallet, buyerAmount, transactionHash, note } = req.body || {};
   if (!isDisputeAdmin(wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
   if (!/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) return res.status(400).json({ success: false, message: "A confirmed on-chain resolution transaction is required." });
+
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
+
+  // PR-1: three on-chain checks before recording the resolution.
+  //   1. tx.from must be DISPUTE_ADMIN_WALLET
+  //   2. tx.to must be the escrow contract
+  //   3. getEscrow() status must be Released (3) or Refunded (4)
+  //
+  // Fail-open when the RPC node is unreachable (null tx / null onChain) so
+  // an RPC outage cannot permanently block admin from resolving a dispute.
+  const network = escrowNetwork(escrow);
+  const provider = getArcProvider(network);
+
+  let tx = null;
+  try {
+    tx = await provider.getTransaction(transactionHash);
+  } catch (rpcErr) {
+    console.error("[ProofPay] /resolved: getTransaction failed:", rpcErr?.message);
+  }
+
+  if (tx !== null) {
+    const adminWallet = String(process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+    if (adminWallet && tx.from.toLowerCase() !== adminWallet) {
+      return res.status(400).json({
+        success: false,
+        message: "The transaction was not sent from the ProofPay admin wallet.",
+      });
+    }
+
+    if (
+      escrow.escrowContractAddress &&
+      tx.to?.toLowerCase() !== escrow.escrowContractAddress.toLowerCase()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "The transaction was not sent to the correct escrow contract.",
+      });
+    }
+  }
+
+  const onChain = await fetchOnChainEscrow(
+    escrow.escrowContractAddress,
+    escrow.escrowId,
+    network
+  );
+
+  if (onChain !== null) {
+    const terminalStatuses = [CHAIN_STATUS.RELEASED, CHAIN_STATUS.REFUNDED];
+    if (!terminalStatuses.includes(onChain.status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The escrow is not yet resolved on-chain. " +
+          "Wait for the resolveDispute() transaction to confirm and try again.",
+      });
+    }
+  }
+
   escrow.status = Number(buyerAmount) >= Number(escrow.amount) ? "Refunded" : "Released";
   escrow.dispute.status = "Resolved";
   escrow.dispute.resolution = {

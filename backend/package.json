@@ -6,13 +6,15 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test tests/pr1-hardening.test.js"
   },
   "dependencies": {
     "@circle-fin/user-controlled-wallets": "^10.8.0",
     "@vercel/blob": "^2.8.0",
     "axios": "^1.18.1",
     "cors": "^2.8.5",
+    "ethers": "^6.13.5",
     "express": "^4.19.2",
     "pg": "^8.22.0"
   },
