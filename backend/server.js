@@ -19,6 +19,15 @@ import {
   VERIFY_MAX_ATTEMPTS,
   VERIFY_LOCKOUT_MS,
 } from "./lib/hardening.js";
+import {
+  generateNonce,
+  consumeNonce,
+  ensureNoncesTable,
+  verifyEoaSignature,
+  verifyCircleUserToken,
+  issueJwt,
+  verifyJwt,
+} from "./lib/auth.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -27,6 +36,10 @@ dotenv.config();
 validateCircleConfig();
 
 const app = express();
+
+// Behind Vercel there is one proxy hop; without this req.ip is the proxy's
+// address and the /api/auth/nonce rate limit would be shared by all users.
+app.set("trust proxy", 1);
 
 // PR-4 note: the *.vercel.app wildcard below is intentionally kept until the
 // CORS-hardening PR ships. It will be replaced with a pattern scoped to the
@@ -142,6 +155,61 @@ const databasePool = process.env.DATABASE_URL
   : null;
 let databaseReady;
 
+// ── Auth config ──────────────────────────────────────────────────────────────
+// SESSION_SECRET / SESSION_SECRET_PREV are optional in PR-2. Missing means no
+// JWT is issued (200 responses stay the same for legacy callers). PR-3 will
+// enforce a token where SESSION_SECRET IS set — separate Production and Preview
+// secrets are recommended (set both in Vercel).
+const SESSION_SECRET = process.env.SESSION_SECRET || null;
+const SESSION_SECRET_PREV = process.env.SESSION_SECRET_PREV || null;
+
+// DISPUTE_ADMIN_WALLET is read from env so it is never committed.
+const DISPUTE_ADMIN_WALLET = (
+  process.env.DISPUTE_ADMIN_WALLET || ""
+).toLowerCase();
+
+// Allowed domains for SIWE message verification.
+// hostOf never throws: a malformed env value must not crash the backend at boot.
+function hostOf(value) {
+  if (!value) return null;
+  try {
+    return new URL(value.includes("://") ? value : `https://${value}`).hostname;
+  } catch {
+    return null;
+  }
+}
+
+// VERCEL_URL is the per-deployment host; VERCEL_BRANCH_URL is the stable
+// branch alias (proof-pay-git-<branch>-...vercel.app) that previews are
+// normally opened from, so both must be allowed for testing on previews.
+const SIWE_ALLOWED_DOMAINS = [
+  "proofpay.online",
+  "www.proofpay.online",
+  "localhost",
+  hostOf(process.env.VERCEL_URL),
+  hostOf(process.env.VERCEL_BRANCH_URL),
+  hostOf(process.env.VERCEL_PROJECT_PRODUCTION_URL),
+  hostOf(process.env.FRONTEND_URL),
+].filter(Boolean);
+
+// In-process nonce store for local-file (no DATABASE_URL) mode.
+// Vercel serverless: each cold-start gets a fresh Map; nonces that survive
+// across cold starts are the Postgres-backed ones. This is acceptable — a
+// nonce from a dead instance simply cannot be consumed and the user re-requests.
+const localNonces = new Map();
+
+// ── JWT helper (available to all endpoints from PR-3 onwards) ────────────────
+/**
+ * Extract and verify the Bearer JWT from Authorization header.
+ * Returns decoded payload or null. Never throws.
+ */
+export function extractJwt(req) {
+  const auth = req.get("Authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return null;
+  return verifyJwt(token, SESSION_SECRET, SESSION_SECRET_PREV);
+}
+
 async function ensureDatabase() {
   if (!databasePool) return;
 
@@ -156,9 +224,7 @@ async function ensureDatabase() {
           PRIMARY KEY (record_type, record_id)
         )
       `);
-      // PR-1: per-escrow verify-seller attempt counters — Postgres-backed so
-      // they survive Vercel cold starts (no in-memory Map).
-      // locked_until: NULL means not locked; a timestamp means locked until then.
+      // PR-1: per-escrow verify-seller attempt counters.
       await databasePool.query(`
         CREATE TABLE IF NOT EXISTS proofpay_verify_attempts (
           escrow_id    TEXT PRIMARY KEY,
@@ -167,12 +233,12 @@ async function ensureDatabase() {
           updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
-      // Safe migration: add locked_until if an older deployment created the
-      // table without it (ALTER TABLE ... ADD COLUMN IF NOT EXISTS is idempotent).
       await databasePool.query(`
         ALTER TABLE proofpay_verify_attempts
           ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ
       `);
+      // PR-2: single-use nonces for SIWE auth.
+      await ensureNoncesTable(databasePool);
     })();
   }
 
@@ -373,16 +439,137 @@ async function saveWalletConnections(connections) {
   fs.writeFileSync(walletConnectionsFile, JSON.stringify(connections, null, 2));
 }
 
-app.post("/api/wallet/connect", async (req, res) => {
-  const { address, message, signature, signedAt } = req.body;
+// ── PR-2: nonce endpoint ─────────────────────────────────────────────────────
+// Unauthenticated. Rate-limited to 10 requests per IP per minute via a simple
+// in-process counter (acceptable: stateless on Vercel, purpose is friction not
+// absolute enforcement; Postgres-backed nonces prevent replay regardless).
+const nonceRateMap = new Map(); // ip -> { count, windowStart }
+const NONCE_RATE_LIMIT = 10;
+const NONCE_RATE_WINDOW_MS = 60 * 1000;
 
-  if (!address || !message || !signature || !signedAt) {
+app.get("/api/auth/nonce", async (req, res) => {
+  await ensureDatabase();
+
+  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = nonceRateMap.get(ip);
+
+  if (entry && now - entry.windowStart < NONCE_RATE_WINDOW_MS) {
+    if (entry.count >= NONCE_RATE_LIMIT) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many nonce requests. Please wait a minute.",
+      });
+    }
+    entry.count += 1;
+  } else {
+    nonceRateMap.set(ip, { count: 1, windowStart: now });
+  }
+
+  try {
+    const { nonce, expiresAt } = await generateNonce(databasePool, localNonces);
+    return res.json({ nonce, expiresAt });
+  } catch (err) {
+    console.error("Nonce generation error:", err.message);
+    return res.status(500).json({ success: false, message: "Could not generate nonce." });
+  }
+});
+
+// ── PR-2: wallet connect — verify sig, issue JWT ─────────────────────────────
+// Three paths:
+//   1. SIWE (EOA)        — body has { address, message, signature } where
+//                          message parses as a SIWE message (contains "Nonce:").
+//   2. Circle wallet     — body has { address, walletType: "circle" } and
+//                          X-User-Token header; no signature field.
+//   3. Legacy            — any other shape (today's frontend static message).
+//                          Accepted as before: 200 { success: true, address },
+//                          no token. Backward compatibility preserved.
+app.post("/api/wallet/connect", async (req, res) => {
+  await ensureDatabase();
+
+  const { address, message, signature, signedAt, walletType } = req.body;
+
+  if (!address) {
+    return res.status(400).json({
+      success: false,
+      message: "Wallet address is required.",
+    });
+  }
+
+  // ── Path 2: Circle wallet ─────────────────────────────────────────────────
+  if (walletType === "circle") {
+    const userToken = req.get("X-User-Token");
+    const network = getRequestNetwork(req);
+    const blockchain = CIRCLE_BLOCKCHAIN_BY_NETWORK[network];
+
+    const result = await verifyCircleUserToken(
+      address,
+      userToken,
+      CIRCLE_API_URL,
+      CIRCLE_API_KEY_BY_NETWORK[network] || "",
+      blockchain
+    );
+
+    if (result.error) {
+      const isExpired = result.code === "CIRCLE_EXPIRED";
+      return res.status(401).json({
+        success: false,
+        message: result.error,
+        // circleExpired flag lets PR-3 frontend show the right message.
+        circleExpired: isExpired,
+      });
+    }
+
+    const isAdmin = result.address.toLowerCase() === DISPUTE_ADMIN_WALLET;
+    const token = issueJwt(
+      { address: result.address, network: result.network, isAdmin },
+      SESSION_SECRET
+    );
+
+    await _storeWalletConnection(address, message || "", signature || "", signedAt || "");
+    return res.json({ success: true, address: result.address, ...(token ? { token } : {}) });
+  }
+
+  // ── Path 1: SIWE (EOA) ────────────────────────────────────────────────────
+  if (message && signature) {
+    const result = await verifyEoaSignature(
+      { address, message, signature },
+      databasePool,
+      localNonces,
+      SIWE_ALLOWED_DOMAINS
+    );
+
+    // "not_siwe" means the message is not a SIWE message — fall through to legacy.
+    if (result.error && result.error !== "not_siwe") {
+      return res.status(401).json({ success: false, message: result.error });
+    }
+
+    if (!result.error) {
+      // Valid SIWE — issue token.
+      const isAdmin = result.address.toLowerCase() === DISPUTE_ADMIN_WALLET;
+      const token = issueJwt(
+        { address: result.address, network: result.network, isAdmin },
+        SESSION_SECRET
+      );
+      await _storeWalletConnection(address, message, signature, signedAt || new Date().toISOString());
+      return res.json({ success: true, address: result.address, ...(token ? { token } : {}) });
+    }
+  }
+
+  // ── Path 3: Legacy (static message, no nonce) ─────────────────────────────
+  // Accept and store exactly as before — 200, no token.
+  if (!message || !signature || !signedAt) {
     return res.status(400).json({
       success: false,
       message: "Wallet address and signature are required.",
     });
   }
 
+  await _storeWalletConnection(address, message, signature, signedAt);
+  return res.json({ success: true, address });
+});
+
+async function _storeWalletConnection(address, message, signature, signedAt) {
   const connections = await loadWalletConnections();
   const normalizedAddress = address.toLowerCase();
   const connection = {
@@ -395,17 +582,13 @@ app.post("/api/wallet/connect", async (req, res) => {
   const existingIndex = connections.findIndex(
     (item) => item.address?.toLowerCase() === normalizedAddress
   );
-
   if (existingIndex >= 0) {
     connections[existingIndex] = connection;
   } else {
     connections.push(connection);
   }
-
   await saveWalletConnections(connections);
-
-  return res.json({ success: true, address });
-});
+}
 
 
 app.post("/api/circle/request-email-otp", async (req, res) => {
