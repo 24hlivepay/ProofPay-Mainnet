@@ -187,6 +187,15 @@ export default function SellerAccept() {
             <div className="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
               <div className="space-y-5">
                 <SummaryRow label="Buyer" value={escrow.buyerName} />
+                {escrow.buyerWallet && (
+                  <SummaryRow
+                    label="Buyer wallet"
+                    value={shortenAddress(escrow.buyerWallet)}
+                    copyValue={escrow.buyerWallet}
+                    valueClassName="font-mono text-blue-700"
+                    copyable
+                  />
+                )}
                 <SummaryRow label="Product / Service" value={escrow.productName} />
                 {escrow.productId && <SummaryRow label="Product ID" value={escrow.productId} />}
                 {escrow.description && <SummaryRow label="Order details" value={escrow.description} />}
