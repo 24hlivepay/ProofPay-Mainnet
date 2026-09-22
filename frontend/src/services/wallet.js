@@ -283,8 +283,15 @@ export async function connectWalletWithOptions({
     if (jwt) {
       localStorage.setItem("proofpay-jwt", jwt);
     }
-  } catch {
-    // connect call failing does not block the local session
+  } catch (err) {
+    // This used to be a bare `catch {}` -- any /wallet/connect failure
+    // (bad nonce, domain mismatch, backend error) was silently ignored,
+    // so the function still resolved "successfully" with an address but
+    // no JWT. Every requireAuth()-protected action after that then failed
+    // with a confusing, unrelated-looking error. The caller asked for
+    // requireSignature specifically because it needs a proven session, so
+    // surface the real reason instead of pretending this succeeded.
+    throw new Error(err?.response?.data?.message || "Could not verify your wallet session. Please try again.");
   }
 
   return { provider, signer, ...session, networkStatus };
