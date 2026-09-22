@@ -6,7 +6,6 @@ import {
   getWalletErrorMessage,
   getWalletSession,
 } from "../services/wallet";
-import api from "../services/api";
 import { useClickOutside } from "./useClickOutside";
 import { getCurrentNetworkId } from "../config/network";
 import CopyButton from "../components/CopyButton";
@@ -29,12 +28,9 @@ export function useWalletBadge() {
         requireSignature: true,
         requestAccountSelection,
       });
-      await api.post("/wallet/connect", {
-        address: walletSession.address,
-        message: walletSession.message,
-        signature: walletSession.signature,
-        signedAt: walletSession.signedAt,
-      });
+      // connectWalletWithOptions already posts to /wallet/connect and stores
+      // the JWT internally (PR-3) -- posting again here would reuse the
+      // same single-use SIWE nonce and always fail.
       setWalletAddress(walletSession.address);
       setMenuOpen(false);
     } catch (error) {

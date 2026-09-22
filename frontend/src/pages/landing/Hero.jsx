@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectWalletWithOptions, getWalletErrorMessage } from "../../services/wallet";
-import api from "../../services/api";
 import { getNetworkConfig } from "../../config/network";
 import ProofPayLogo from "../../components/ProofPayLogo";
 
@@ -16,18 +15,14 @@ export default function Hero() {
     try {
       setConnecting(true);
       setWalletError("");
-      const walletSession = await connectWalletWithOptions({
+      await connectWalletWithOptions({
         requireSignature: true,
         walletType,
         onStatus: setWalletStatus,
       });
-
-      await api.post("/wallet/connect", {
-        address: walletSession.address,
-        message: walletSession.message,
-        signature: walletSession.signature,
-        signedAt: walletSession.signedAt,
-      });
+      // connectWalletWithOptions already posts to /wallet/connect and stores
+      // the JWT internally (PR-3) -- posting again here would reuse the
+      // same single-use SIWE nonce and always fail.
       setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}. Opening your dashboard...`);
       setShowWalletChoices(false);
       navigate("/dashboard");
