@@ -176,6 +176,11 @@ export default function CreateEscrow() {
       return;
     }
 
+    const confirmed = window.confirm(
+      `This deal will be locked to seller wallet:\n\n${expectedSeller.trim().toLowerCase()}\n\nOnly this wallet will be able to accept it. Make sure this is your seller's correct address before continuing.`
+    );
+    if (!confirmed) return;
+
     try {
       setSubmitting(true);
       setError("");
