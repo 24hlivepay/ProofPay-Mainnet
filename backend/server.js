@@ -88,21 +88,21 @@ app.use(express.json({ limit: "12mb" }));
 function requireAuth(role) {
   return (req, res, next) => {
     if (!process.env.SESSION_SECRET) {
-      return res.status(503).json({ error: "auth not configured" });
+      return res.status(503).json({ error: "auth not configured", message: "Sign-in is temporarily unavailable. Please try again shortly." });
     }
     const header = req.headers["authorization"] || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) {
-      return res.status(401).json({ error: "no token" });
+      return res.status(401).json({ error: "no token", message: "Please connect and sign in with your wallet, then try again." });
     }
     const payload = verifyJwt(token);
     if (!payload) {
-      return res.status(401).json({ error: "invalid or expired token" });
+      return res.status(401).json({ error: "invalid or expired token", message: "Your session has expired. Please reconnect your wallet and try again." });
     }
     if (role === "admin") {
       const adminWallet = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
       if (!adminWallet || payload.address.toLowerCase() !== adminWallet) {
-        return res.status(403).json({ error: "admin only" });
+        return res.status(403).json({ error: "admin only", message: "This action requires admin access." });
       }
     }
     req.auth = payload;
