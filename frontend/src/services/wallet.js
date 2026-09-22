@@ -1,5 +1,5 @@
 import { BrowserProvider } from "ethers";
-import { getNetworkConfig } from "../config/network";
+import { getCurrentNetworkId, getNetworkConfig } from "../config/network";
 
 function getWalletAddEthereumChainParams(network = getNetworkConfig()) {
   return {
@@ -128,6 +128,32 @@ export async function connectWalletWithOptions({
       );
     }
 
+    // PR-3: verify Circle userToken server-side and get a JWT
+    if (requireSignature) {
+      try {
+        const { default: api } = await import("./api.js");
+        const connectRes = await api.post("/wallet/connect", {
+          address: session.address,
+          walletType: "circle",
+          network: getCurrentNetworkId(),
+        }, {
+          headers: { "X-User-Token": auth.userToken },
+        });
+        const jwt = connectRes.data?.token;
+        if (jwt) {
+          localStorage.setItem("proofpay-jwt", jwt);
+        }
+        // Circle 155104 expired
+        if (connectRes.data?.code === "CIRCLE_EXPIRED") {
+          throw new Error("Your Circle session has expired. Sign in with email again.");
+        }
+      } catch (err) {
+        // If the error message is the Circle expiry, re-throw it
+        if (/circle session has expired/i.test(err?.message || "")) throw err;
+        // Other connect failures (network down, etc.) don't block session
+      }
+    }
+
     return {
       address: session.address,
       walletId: session.walletId,
@@ -179,19 +205,80 @@ export async function connectWalletWithOptions({
     return { provider, signer, address, networkStatus };
   }
 
-  const signedAt = new Date().toISOString();
-  const message = [
-    "Sign in to ProofPay.",
-    "",
-    `Wallet: ${address}`,
-    `Issued at: ${signedAt}`,
-    "",
-    "This signature proves you control this wallet. It does not create a transaction or charge gas.",
-  ].join("\n");
-  const signature = await signer.signMessage(message);
-  const session = { address, message, signature, signedAt };
+  // PR-3: fetch a SIWE nonce and build an EIP-4361 message so the backend
+  // can verify wallet ownership instead of just storing the signature.
+  let message, signature, signedAt;
+  try {
+    const { API_BASE_URL } = await import("./api.js");
+    const nonceRes = await fetch(`${API_BASE_URL}/auth/nonce`, {
+      headers: { "X-ProofPay-Network": getCurrentNetworkId() },
+    });
+    const nonceData = await nonceRes.json();
 
+    signedAt = new Date().toISOString();
+    if (nonceData?.nonce) {
+      // SIWE / EIP-4361 style message — backend verifies with verifyEoaSignature()
+      const network = getNetworkConfig();
+      message = [
+        `proofpay.online wants you to sign in with your Ethereum account:`,
+        address,
+        "",
+        "Sign in to ProofPay. This does not create a transaction.",
+        "",
+        `URI: https://proofpay.online`,
+        `Version: 1`,
+        `Chain ID: ${network.chainId}`,
+        `Nonce: ${nonceData.nonce}`,
+        `Issued At: ${signedAt}`,
+        `Expiration Time: ${new Date(Date.now() + 5 * 60 * 1000).toISOString()}`,
+      ].join("\n");
+    } else {
+      // Fallback: legacy message if nonce endpoint not available
+      message = [
+        "Sign in to ProofPay.",
+        "",
+        `Wallet: ${address}`,
+        `Issued at: ${signedAt}`,
+        "",
+        "This signature proves you control this wallet. It does not create a transaction or charge gas.",
+      ].join("\n");
+    }
+
+    signature = await signer.signMessage(message);
+  } catch {
+    // If nonce fetch fails (network/backend down), fall back to legacy message
+    signedAt = new Date().toISOString();
+    message = [
+      "Sign in to ProofPay.",
+      "",
+      `Wallet: ${address}`,
+      `Issued at: ${signedAt}`,
+      "",
+      "This signature proves you control this wallet. It does not create a transaction or charge gas.",
+    ].join("\n");
+    signature = await signer.signMessage(message);
+  }
+
+  const session = { address, message, signature, signedAt };
   localStorage.setItem("proofpay-wallet-session", JSON.stringify(session));
+
+  // PR-3: post to /wallet/connect and store the returned JWT
+  try {
+    const { default: api } = await import("./api.js");
+    const connectRes = await api.post("/wallet/connect", {
+      address,
+      message,
+      signature,
+      walletType: "metamask",
+      network: getCurrentNetworkId(),
+    });
+    const jwt = connectRes.data?.token;
+    if (jwt) {
+      localStorage.setItem("proofpay-jwt", jwt);
+    }
+  } catch {
+    // connect call failing does not block the local session
+  }
 
   return { provider, signer, ...session, networkStatus };
 }
@@ -280,6 +367,7 @@ export async function disconnectWallet() {
   localStorage.removeItem("proofpay-email");
   localStorage.removeItem("proofpay-circle-auth");
   localStorage.removeItem("proofpay-last-safe-route");
+  localStorage.removeItem("proofpay-jwt"); // PR-3
   sessionStorage.removeItem("proofpay-circle-auth");
   sessionStorage.removeItem("proofpay-circle-otp-session");
 }

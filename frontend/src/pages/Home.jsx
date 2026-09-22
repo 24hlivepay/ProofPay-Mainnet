@@ -178,12 +178,9 @@ export default function Home() {
         requestAccountSelection,
         onStatus: setWalletStatus,
       });
-      await api.post("/wallet/connect", {
-        address: walletSession.address,
-        message: walletSession.message,
-        signature: walletSession.signature,
-        signedAt: walletSession.signedAt,
-      });
+      // connectWalletWithOptions already posts to /wallet/connect and stores
+      // the JWT internally (PR-3) -- posting again here would reuse the
+      // same single-use SIWE nonce and always fail.
       setWalletAddress(walletSession.address);
       setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}.`);
       setWalletMenuOpen(false);

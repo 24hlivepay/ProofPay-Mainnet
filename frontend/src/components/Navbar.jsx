@@ -1,8 +1,58 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentNetworkId, getNetworkConfig, NETWORKS, setCurrentNetworkId } from "../config/network";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ProofPayLogo from "./ProofPayLogo";
+
+// PR-3: non-blocking auth-expired banner.
+// Listens for the "proofpay:auth-expired" event fired by api.js on 401.
+// Shows a thin dismissible bar prompting the user to sign in again.
+// Does NOT interrupt any action already in flight.
+function AuthBanner() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const show = () => setVisible(true);
+    window.addEventListener("proofpay:auth-expired", show);
+    return () => window.removeEventListener("proofpay:auth-expired", show);
+  }, []);
+
+  if (!visible) return null;
+
+  function handleSignIn() {
+    setVisible(false);
+    // Re-trigger the connect flow — works for both MetaMask and Circle wallets.
+    // Home.jsx's connect button does the same thing; dispatching this event
+    // lets any page trigger it without coupling to page-specific state.
+    window.dispatchEvent(new CustomEvent("proofpay:request-connect"));
+  }
+
+  return (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-3 bg-amber-50 px-4 py-2 text-sm text-amber-800 border-b border-amber-200"
+    >
+      <span>Session expired — sign in again to continue.</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleSignIn}
+          className="rounded-md bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200 transition"
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => setVisible(false)}
+          aria-label="Dismiss"
+          className="text-amber-600 hover:text-amber-900 transition"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function switchToNetwork(nextId) {
   const isCircleWallet = localStorage.getItem("proofpay-wallet-type") === "circle";
@@ -22,6 +72,10 @@ function switchToNetwork(nextId) {
     localStorage.removeItem("proofpay-last-safe-route");
   }
 
+  // PR-3: JWT is network-bound — always clear on switch so the new network
+  // gets a fresh token (the connect flow will issue one for the new chainId).
+  localStorage.removeItem("proofpay-jwt");
+
   setCurrentNetworkId(nextId);
   window.location.reload();
 }
@@ -36,6 +90,7 @@ export default function Navbar({ walletSlot }) {
 
   return (
     <header className="border-b border-slate-100 bg-white">
+      <AuthBanner />
       <div
         className={`py-1.5 text-center text-xs font-semibold ${
           isMainnet ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"

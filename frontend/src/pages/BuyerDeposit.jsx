@@ -8,7 +8,7 @@ import CopyButton from "../components/CopyButton";
 import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
 import { fundEscrow } from "../services/proofpayContract";
-import { connectWallet } from "../services/wallet";
+import { connectWalletWithOptions } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
 import { shortenAddress } from "../utils/address";
 
@@ -106,7 +106,12 @@ export default function BuyerDeposit() {
         throw new Error("This escrow has an invalid USDC amount. Create it again with a number such as 27.");
       }
 
-      const { address: connectedAddress } = await connectWallet();
+      // PR-3: re-verify with a fresh SIWE signature so the JWT for /deposit
+      // (requireAuth) is guaranteed valid, instead of depending on whatever
+      // token an earlier page happened to leave in localStorage.
+      const { address: connectedAddress } = await connectWalletWithOptions({
+        requireSignature: true,
+      });
       const expectedBuyerWallet = escrowData.buyerWallet?.toLowerCase();
 
       if (expectedBuyerWallet && connectedAddress.toLowerCase() !== expectedBuyerWallet) {
@@ -136,7 +141,11 @@ export default function BuyerDeposit() {
       updateEscrow(updatedEscrow);
       navigate("/active", { state: { backTo: "/dashboard/buying" } });
     } catch (transactionError) {
-      setError(transactionError.message || "USDC deposit failed.");
+      setError(
+        transactionError.response?.data?.message ||
+        transactionError.message ||
+        "USDC deposit failed."
+      );
     } finally {
       setSubmitting(false);
     }
