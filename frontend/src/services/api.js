@@ -13,8 +13,13 @@ const api = axios.create({
 // escrow/Circle-wallet data belongs to — see MAINNET_TODO.md step 4.
 api.interceptors.request.use((config) => {
   config.headers["X-ProofPay-Network"] = getCurrentNetworkId();
-  // PR-3: attach JWT if available
-  const token = localStorage.getItem("proofpay-jwt");
+  // Admin 2FA: /admin/* calls use the short-lived, fully-verified admin
+  // session (password + email OTP) stored in sessionStorage -- separate from
+  // the regular wallet JWT so it clears when the tab closes and never leaks
+  // into normal buyer/seller requests.
+  const isAdminRequest = (config.url || "").includes("/admin/");
+  const adminToken = isAdminRequest ? sessionStorage.getItem("proofpay-admin-jwt") : null;
+  const token = adminToken || localStorage.getItem("proofpay-jwt");
   if (token) {
     config.headers["Authorization"] = `Bearer ${token}`;
   }
@@ -33,6 +38,15 @@ api.interceptors.response.use(
   async (error) => {
     const config = error.config;
     const isAuthEndpoint = (config?.url || "").includes("/wallet/connect");
+    const isAdminRequest = (config?.url || "").includes("/admin/");
+
+    if (error.response?.status === 401 && isAdminRequest) {
+      // A plain wallet reconnect can't restore the password+OTP admin
+      // session -- clear the stale token so the admin page redirects to a
+      // full re-login instead of silently retrying with the wrong token.
+      sessionStorage.removeItem("proofpay-admin-jwt");
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && config && !config._retriedAfterReauth && !isAuthEndpoint) {
       config._retriedAfterReauth = true;
