@@ -2160,14 +2160,27 @@ app.post("/api/admin/verify-otp", requireAuth("admin"), async (req, res) => {
   return res.json({ success: true, token });
 });
 
+// Shared with GET /api/escrows below -- the same grouping buyers/sellers see
+// on their own dashboards, so "Active" means the same thing for admin too.
+const ESCROW_STATUS_CATEGORIES = {
+  pending: ["Waiting Seller", "Seller Accepted"],
+  active: ["Funds Locked", "Delivered", "Disputed"],
+  completed: ["Released", "Refunded"],
+  cancelled: ["Cancelled"],
+};
+
 app.get("/api/admin/escrows", requireAuth("admin"), requireFullAdmin, async (req, res) => {
   const network = getRequestNetwork(req);
-  const { search = "", status = "" } = req.query;
+  const { search = "", status = "", category = "" } = req.query;
   const allEscrows = await loadEscrows();
   const normalizedSearch = String(search).trim().toLowerCase();
 
   let filtered = allEscrows.filter((escrow) => escrowNetwork(escrow) === network);
-  if (status) filtered = filtered.filter((escrow) => escrow.status === status);
+  if (category && ESCROW_STATUS_CATEGORIES[category]) {
+    filtered = filtered.filter((escrow) => ESCROW_STATUS_CATEGORIES[category].includes(escrow.status));
+  } else if (status) {
+    filtered = filtered.filter((escrow) => escrow.status === status);
+  }
   if (normalizedSearch) {
     filtered = filtered.filter((escrow) =>
       escrow.escrowId?.toLowerCase().includes(normalizedSearch) ||
@@ -2405,14 +2418,7 @@ app.get("/api/escrows", async (req, res) => {
   const allEscrows = await loadEscrows();
 
   const { category, buyerWallet, wallet, role } = req.query;
-  const categories = {
-    pending: ["Waiting Seller", "Seller Accepted"],
-    active: ["Funds Locked", "Delivered", "Disputed"],
-    completed: ["Released", "Refunded"],
-    cancelled: ["Cancelled"],
-  };
-
-  const allowedStatuses = categories[category] || categories.active;
+  const allowedStatuses = ESCROW_STATUS_CATEGORIES[category] || ESCROW_STATUS_CATEGORIES.active;
   const connectedWallet = (wallet || buyerWallet || "").toLowerCase();
   const recordRole = role === "seller" ? "seller" : "buyer";
 

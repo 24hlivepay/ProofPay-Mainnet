@@ -21,11 +21,23 @@ const STATUSES = [
   "Disputed",
 ];
 
+// Same grouping buyers/sellers see on their own dashboards (Pending/Active/
+// Completed/Cancelled) -- quick shortcuts so admin doesn't have to know
+// which individual statuses make up "active" to find them.
+const CATEGORIES = [
+  { value: "", label: "All" },
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
 export default function AdminEscrows() {
   useAdminGate();
   const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
   const [escrows, setEscrows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +48,7 @@ export default function AdminEscrows() {
     let active = true;
     setLoading(true);
     api
-      .get("/admin/escrows", { params: { search, status } })
+      .get("/admin/escrows", { params: { search, status, category } })
       .then((response) => {
         if (active) setEscrows(response.data.escrows || []);
       })
@@ -55,7 +67,7 @@ export default function AdminEscrows() {
     return () => {
       active = false;
     };
-  }, [search, status, navigate]);
+  }, [search, status, category, navigate]);
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -69,7 +81,27 @@ export default function AdminEscrows() {
 
         <AdminNav />
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((tab) => (
+            <button
+              key={tab.value || "all"}
+              type="button"
+              onClick={() => {
+                setCategory(tab.value);
+                setStatus("");
+              }}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                category === tab.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-3">
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -78,12 +110,15 @@ export default function AdminEscrows() {
           />
           <select
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setCategory("");
+            }}
             className="rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-blue-500"
           >
             {STATUSES.map((value) => (
               <option key={value || "all"} value={value}>
-                {value || "All statuses"}
+                {value || "Or pick an exact status..."}
               </option>
             ))}
           </select>
