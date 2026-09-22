@@ -116,7 +116,7 @@ function tryAuth(req, _res, next) {
   const header = req.headers["authorization"] || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (token) {
-    req.auth = verifyJwt(token) || null;
+    req.auth = verifyJwt(token, SESSION_SECRET, SESSION_SECRET_PREV) || null;
   }
   next();
 }
