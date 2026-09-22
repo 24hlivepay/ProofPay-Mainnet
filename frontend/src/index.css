@@ -46,6 +46,11 @@
 [data-network] [class~="text-blue-900"] { color: var(--net-900) !important; }
 [data-network] [class~="hover:text-blue-600"]:hover { color: var(--net-600) !important; }
 [data-network] [class~="hover:text-blue-700"]:hover { color: var(--net-700) !important; }
+/* An unconditional text-blue-* class overridden above (!important) can't be
+   beaten by a plain (non-!important) hover:text-white utility -- the text
+   stayed net-colored while hover:bg-blue-* turned the background the same
+   color, making the label invisible on hover. Force it white here instead. */
+[data-network] [class~="hover:text-white"]:hover { color: white !important; }
 
 [data-network] [class~="from-blue-50"] { --tw-gradient-from: var(--net-50) !important; }
 [data-network] [class~="from-blue-700"] { --tw-gradient-from: var(--net-700) !important; }
