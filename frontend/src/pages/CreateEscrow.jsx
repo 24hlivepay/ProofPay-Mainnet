@@ -53,6 +53,8 @@ export default function CreateEscrow() {
   const [assetBalance, setAssetBalance] = useState("");
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [description, setDescription] = useState("");
+  const [expectedSeller, setExpectedSeller] = useState("");
+  const [sellerSeen, setSellerSeen] = useState(null); // null | true | false
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedAsset = getEscrowAsset(assetSymbol);
@@ -124,9 +126,36 @@ export default function CreateEscrow() {
     setAmount(truncateAssetAmount(maximum, selectedAsset.decimals));
   }
 
+  const isValidSellerAddress = (addr) => /^0x[0-9a-fA-F]{40}$/.test(addr.trim());
+
+  async function checkSellerSeen(addr) {
+    if (!isValidSellerAddress(addr)) return;
+    try {
+      const response = await api.get(`/wallet/seen?address=${encodeURIComponent(addr.trim().toLowerCase())}`);
+      setSellerSeen(response.data?.seen ?? null);
+    } catch {
+      setSellerSeen(null);
+    }
+  }
+
   async function handleCreateEscrow() {
     if (!buyerName || !productName || !amount) {
       setError("Please complete all required fields.");
+      return;
+    }
+
+    if (!expectedSeller.trim()) {
+      setError("Seller wallet address is required.");
+      return;
+    }
+
+    if (!isValidSellerAddress(expectedSeller)) {
+      setError("Enter a valid wallet address starting with 0x.");
+      return;
+    }
+
+    if (expectedSeller.trim().toLowerCase() === walletAddress?.toLowerCase()) {
+      setError("The seller cannot be yourself.");
       return;
     }
 
@@ -163,6 +192,7 @@ export default function CreateEscrow() {
         tokenAddress: selectedAsset.tokenAddress,
         escrowContractAddress: selectedAsset.escrowAddress,
         description,
+        expectedSeller: expectedSeller.trim().toLowerCase(),
       });
 
       setEscrowData(response.data.escrow);
@@ -210,7 +240,7 @@ export default function CreateEscrow() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h1 className="text-2xl font-bold text-slate-900">Create New Escrow</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Create the deal and send its secure link to the seller. Their wallet will bind automatically when they accept.
+            Enter your seller&apos;s ProofPay wallet address. They must sign in to ProofPay first (any wallet type) to have one — ask them to check their Profile page and copy it from there.
           </p>
 
           <div className="mt-5 rounded-xl border p-4 sm:p-5">
@@ -283,6 +313,39 @@ export default function CreateEscrow() {
                 </div>
               </div>
               <textarea rows={3} placeholder="Deal Description (Optional)" value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500" />
+
+              {/* PR-3: required seller wallet lock */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label className="mb-1 block text-sm font-semibold text-slate-700">
+                  Seller Wallet Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="0x..."
+                  value={expectedSeller}
+                  onChange={(e) => {
+                    setExpectedSeller(e.target.value);
+                    setSellerSeen(null);
+                  }}
+                  onBlur={() => checkSellerSeen(expectedSeller)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 font-mono text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Only this wallet can accept the deal. Ask your seller to copy their address from their ProofPay Profile page.
+                </p>
+                {expectedSeller && !isValidSellerAddress(expectedSeller) && (
+                  <p className="mt-1.5 text-xs text-red-600">Enter a valid wallet address starting with 0x.</p>
+                )}
+                {expectedSeller.trim().toLowerCase() === walletAddress?.toLowerCase() && (
+                  <p className="mt-1.5 text-xs text-red-600">The seller cannot be yourself.</p>
+                )}
+                {sellerSeen === false && isValidSellerAddress(expectedSeller) && (
+                  <p className="mt-1.5 text-xs text-amber-700">
+                    This wallet hasn&apos;t connected to ProofPay yet — make sure your seller has created an account first.
+                  </p>
+                )}
+              </div>
+
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <strong>12-hour secure link</strong>
                 <p className="mt-1 text-amber-800">This escrow request expires automatically in 12 hours if funds are not locked.</p>
@@ -293,7 +356,15 @@ export default function CreateEscrow() {
           {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
 
           <div className="mt-6">
-            <PrimaryButton onClick={handleCreateEscrow} disabled={submitting}>
+            <PrimaryButton
+              onClick={handleCreateEscrow}
+              disabled={
+                submitting ||
+                !expectedSeller.trim() ||
+                !isValidSellerAddress(expectedSeller) ||
+                expectedSeller.trim().toLowerCase() === walletAddress?.toLowerCase()
+              }
+            >
               {submitting ? "Creating Escrow..." : "Generate Secure Escrow Link"}
             </PrimaryButton>
           </div>

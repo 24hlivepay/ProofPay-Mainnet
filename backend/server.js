@@ -27,6 +27,7 @@ import {
   verifyCircleUserToken,
   issueJwt,
   verifyJwt,
+  sanitizeEscrow,
 } from "./lib/auth.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
 import { validateCircleConfig } from "./services/circleService.js";
@@ -69,6 +70,56 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: "12mb" }));
+
+// ---------------------------------------------------------------------------
+// PR-3: Auth middleware
+//
+// requireAuth([role])
+//   Fail-closed: if SESSION_SECRET is not set → 503 (never silently skips).
+//   Reads Authorization: Bearer <token>, verifies JWT, attaches req.auth.
+//   role "admin": additionally re-checks jwt.isAdmin against DISPUTE_ADMIN_WALLET.
+//
+// tryAuth()
+//   Like requireAuth but non-blocking: attaches req.auth if a valid JWT is
+//   present, otherwise leaves req.auth = null. Used on endpoints that serve
+//   anonymous callers but sanitize differently when authenticated.
+// ---------------------------------------------------------------------------
+
+function requireAuth(role) {
+  return (req, res, next) => {
+    if (!process.env.SESSION_SECRET) {
+      return res.status(503).json({ error: "auth not configured" });
+    }
+    const header = req.headers["authorization"] || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) {
+      return res.status(401).json({ error: "no token" });
+    }
+    const payload = verifyJwt(token);
+    if (!payload) {
+      return res.status(401).json({ error: "invalid or expired token" });
+    }
+    if (role === "admin") {
+      const adminWallet = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+      if (!adminWallet || payload.address.toLowerCase() !== adminWallet) {
+        return res.status(403).json({ error: "admin only" });
+      }
+    }
+    req.auth = payload;
+    next();
+  };
+}
+
+function tryAuth(req, _res, next) {
+  req.auth = null;
+  if (!process.env.SESSION_SECRET) { next(); return; }
+  const header = req.headers["authorization"] || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (token) {
+    req.auth = verifyJwt(token) || null;
+  }
+  next();
+}
 
 const CIRCLE_API_URL = "https://api.circle.com";
 
@@ -472,6 +523,47 @@ app.get("/api/auth/nonce", async (req, res) => {
   } catch (err) {
     console.error("Nonce generation error:", err.message);
     return res.status(500).json({ success: false, message: "Could not generate nonce." });
+  }
+});
+
+// ── PR-3: wallet/seen — has this address ever appeared in ProofPay? ──────────
+// Unauthenticated oracle. Same rate limit as /api/auth/nonce (10 req/IP/min)
+// to prevent enumeration of which addresses have used ProofPay.
+const seenRateMap = new Map(); // ip -> { count, windowStart }
+
+app.get("/api/wallet/seen", async (req, res) => {
+  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = seenRateMap.get(ip);
+
+  if (entry && now - entry.windowStart < NONCE_RATE_WINDOW_MS) {
+    if (entry.count >= NONCE_RATE_LIMIT) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many requests. Please wait a minute.",
+      });
+    }
+    entry.count += 1;
+  } else {
+    seenRateMap.set(ip, { count: 1, windowStart: now });
+  }
+
+  const address = (req.query.address || "").trim().toLowerCase();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return res.status(400).json({ success: false, message: "Invalid address." });
+  }
+
+  try {
+    const allEscrows = await loadEscrows();
+    const seen = allEscrows.some(
+      (e) =>
+        (e.buyerWallet || "").toLowerCase() === address ||
+        (e.sellerWallet || "").toLowerCase() === address
+    );
+    return res.json({ seen });
+  } catch {
+    // Fail open — do not block escrow creation if this lookup errors.
+    return res.json({ seen: false });
   }
 });
 
@@ -1115,6 +1207,22 @@ app.post("/api/escrow", async (req, res) => {
     });
   }
 
+  // PR-3: expectedSeller is required on all new escrows (address-only lock).
+  // Existing escrows without it are grandfathered (no schema migration needed).
+  const expectedSeller = (req.body.expectedSeller || "").trim().toLowerCase();
+  if (!expectedSeller) {
+    return res.status(400).json({
+      success: false,
+      message: "Seller wallet address is required.",
+    });
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(expectedSeller)) {
+    return res.status(400).json({
+      success: false,
+      message: "Enter a valid wallet address starting with 0x.",
+    });
+  }
+
   // PR-1: crypto-random ID — at least 10 hex chars (~40 bits entropy).
   // Old PP-XXXXXX IDs remain valid; this only affects newly created escrows.
   const escrowId = "PP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
@@ -1127,6 +1235,7 @@ app.post("/api/escrow", async (req, res) => {
     tokenAddress: asset.tokenAddress,
     escrowContractAddress: asset.escrowContractAddress,
     escrowId,
+    expectedSeller,                  // PR-3: normalized to lowercase
     status: "Waiting Seller",
     verificationCode: "",
 
@@ -1155,7 +1264,7 @@ app.post("/api/escrow", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get("/api/escrow/:id", async (req, res) => {
+app.get("/api/escrow/:id", tryAuth, async (req, res) => {
 
   const allEscrows = await loadEscrows();
 
@@ -1176,9 +1285,10 @@ app.get("/api/escrow/:id", async (req, res) => {
 
   }
 
+  const adminWallet = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   res.json({
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth?.address || null, adminWallet),
   });
 
 });
@@ -1189,7 +1299,7 @@ app.get("/api/escrow/:id", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get("/api/escrow/:id/status", async (req, res) => {
+app.get("/api/escrow/:id/status", tryAuth, async (req, res) => {
 
   const allEscrows = await loadEscrows();
 
@@ -1206,10 +1316,12 @@ app.get("/api/escrow/:id/status", async (req, res) => {
 
   }
 
+  const adminWallet = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  const safe = sanitizeEscrow(escrow, req.auth?.address || null, adminWallet);
   res.json({
     success: true,
     status: escrow.status,
-    escrow,
+    escrow: safe,
   });
 
 });
@@ -1220,7 +1332,7 @@ app.get("/api/escrow/:id/status", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow/:id/accept", async (req, res) => {
+app.post("/api/escrow/:id/accept", requireAuth(), async (req, res) => {
 
   const { sellerWallet, sellerName, sellerEmail } = req.body;
 
@@ -1244,6 +1356,26 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
     });
   }
 
+  // PR-3: proof of wallet ownership via JWT-proven identity.
+  // New escrows always have expectedSeller set (enforced at creation).
+  // Grandfathered escrows (no expectedSeller) fall through to first-to-accept.
+  if (escrow.expectedSeller &&
+      req.auth.address.toLowerCase() !== escrow.expectedSeller.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "This deal was locked for a different wallet address. It can only be accepted by the seller the buyer specified.",
+    });
+  }
+
+  // Also verify the claimed sellerWallet body field matches the JWT address
+  // (belt-and-suspenders — ensures the DB record is consistent with the token).
+  if (sellerWallet && req.auth.address.toLowerCase() !== sellerWallet.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "Wallet address does not match your session.",
+    });
+  }
+
   if (escrow.status !== "Waiting Seller") {
     return res.status(400).json({
       success: false,
@@ -1263,9 +1395,8 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
   }
   escrow.sellerVerified = false;
   escrow.sellerVerifiedAt = null;
-  escrow.verificationCode = Math.floor(
-    100000 + Math.random() * 900000
-  ).toString();
+  // PR-1: use crypto.randomInt (was Math.random — not cryptographically random).
+  escrow.verificationCode = generateVerificationCode();
 
   // Keep the in-memory copy in sync with the saved record. The seller
   // verification page reads this copy immediately after acceptance.
@@ -1273,9 +1404,10 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
 
   await saveEscrows(allEscrows);
 
+  const adminWallet = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   res.json({
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth.address, adminWallet),
   });
 
 });
@@ -1292,7 +1424,7 @@ app.post("/api/escrow/:id/accept", async (req, res) => {
 // arguments so hardening.js has no direct dependency on server globals.
 // ---------------------------------------------------------------------------
 
-app.post("/api/escrow/:id/verify-seller", async (req, res) => {
+app.post("/api/escrow/:id/verify-seller", tryAuth, async (req, res) => {
   const { verificationCode } = req.body || {};
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
@@ -1312,7 +1444,8 @@ app.post("/api/escrow/:id/verify-seller", async (req, res) => {
   }
 
   if (escrow.sellerVerified) {
-    return res.json({ success: true, escrow });
+    const adminWalletVS = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+    return res.json({ success: true, escrow: sanitizeEscrow(escrow, req.auth?.address || null, adminWalletVS) });
   }
 
   // PR-1 (v2): check lockout BEFORE evaluating the code so a locked caller
@@ -1376,9 +1509,10 @@ app.post("/api/escrow/:id/verify-seller", async (req, res) => {
   await saveEscrows(allEscrows);
   escrows[req.params.id] = escrow;
 
+  const adminWalletVS2 = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   return res.json({
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth?.address || null, adminWalletVS2),
   });
 });
 
@@ -1389,7 +1523,7 @@ app.post("/api/escrow/:id/verify-seller", async (req, res) => {
 */
 
 
-app.post("/api/escrow/:id/deposit", async (req, res) => {
+app.post("/api/escrow/:id/deposit", requireAuth(), async (req, res) => {
 
   const { transactionHash } = req.body || {};
 
@@ -1407,6 +1541,15 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
     return res.status(400).json({
       success: false,
       message: "This escrow request expired after 12 hours. Create a new escrow to continue.",
+    });
+  }
+
+  // PR-3: JWT address must match the buyer wallet on record.
+  if (escrow.buyerWallet &&
+      req.auth.address.toLowerCase() !== escrow.buyerWallet.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "Only the buyer wallet can deposit funds.",
     });
   }
 
@@ -1511,9 +1654,10 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
 
   escrows[req.params.id] = escrow;
 
+  const adminWalletDep = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   res.json({
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletDep),
   });
 
 });
@@ -1524,7 +1668,7 @@ app.post("/api/escrow/:id/deposit", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow/:id/delivered", async (req, res) => {
+app.post("/api/escrow/:id/delivered", requireAuth(), async (req, res) => {
   const { transactionHash } = req.body || {};
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
@@ -1536,6 +1680,17 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
     });
   }
 
+  // PR-3: seller identity check — JWT address must match sellerWallet on record.
+  if (escrow.sellerWallet &&
+      req.auth.address.toLowerCase() !== escrow.sellerWallet.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "Only the seller wallet can mark delivery.",
+    });
+  }
+
+  const adminWalletDlv = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+
   // PR-1: idempotent — if the on-chain tx was confirmed but the DB update
   // was lost (dropped connection, Vercel timeout), a retry must succeed.
   if (escrow.status === "Delivered") {
@@ -1546,7 +1701,7 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
       if (index !== -1) { allEscrows[index] = escrow; await saveEscrows(allEscrows); }
       escrows[req.params.id] = escrow;
     }
-    return res.json({ success: true, escrow });
+    return res.json({ success: true, escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletDlv) });
   }
 
   // PR-1 (v2): state check — only "Funds Locked" can transition to "Delivered".
@@ -1603,7 +1758,7 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
 
   res.json({
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletDlv),
   });
 
 });
@@ -1614,7 +1769,7 @@ app.post("/api/escrow/:id/delivered", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow/:id/release", async (req, res) => {
+app.post("/api/escrow/:id/release", requireAuth(), async (req, res) => {
 
   const { transactionHash } = req.body || {};
 
@@ -1628,6 +1783,17 @@ app.post("/api/escrow/:id/release", async (req, res) => {
     });
   }
 
+  // PR-3: JWT address must match the buyer wallet on record.
+  if (escrow.buyerWallet &&
+      req.auth.address.toLowerCase() !== escrow.buyerWallet.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "Only the buyer wallet can release funds.",
+    });
+  }
+
+  const adminWalletRel = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+
   // PR-1: idempotent — a retry after a dropped DB write must succeed.
   if (escrow.status === "Released") {
     if (/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "") && !escrow.releaseTransactionHash) {
@@ -1636,7 +1802,7 @@ app.post("/api/escrow/:id/release", async (req, res) => {
       if (index !== -1) { allEscrows[index] = escrow; await saveEscrows(allEscrows); }
       escrows[req.params.id] = escrow;
     }
-    return res.json({ success: true, escrow });
+    return res.json({ success: true, escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletRel) });
   }
 
   if (escrow.status !== "Delivered") {
@@ -1687,7 +1853,7 @@ app.post("/api/escrow/:id/release", async (req, res) => {
   res.json({
 
     success: true,
-    escrow,
+    escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletRel),
 
   });
 
@@ -1698,9 +1864,10 @@ app.post("/api/escrow/:id/release", async (req, res) => {
 | Disputes and private evidence
 |--------------------------------------------------------------------------
 */
-app.post("/api/escrow/:id/dispute", async (req, res) => {
+app.post("/api/escrow/:id/dispute", requireAuth(), async (req, res) => {
   try {
-    const { wallet, reason, statement, files, transactionHash } = req.body || {};
+    const { reason, statement, files, transactionHash } = req.body || {};
+    const wallet = req.auth.address; // PR-3: use JWT address, not body field
     const allEscrows = await loadEscrows();
     const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
     if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
@@ -1717,7 +1884,7 @@ app.post("/api/escrow/:id/dispute", async (req, res) => {
     escrow.status = "Disputed";
     escrow.dispute = {
       id: crypto.randomUUID(),
-      openedBy: String(wallet).toLowerCase(),
+      openedBy: wallet.toLowerCase(),
       openedBySide: side,
       reason: String(reason).trim().slice(0, 120),
       statement: String(statement).trim().slice(0, 4000),
@@ -1730,15 +1897,17 @@ app.post("/api/escrow/:id/dispute", async (req, res) => {
     };
     await saveEscrows(allEscrows);
     escrows[escrow.escrowId] = escrow;
-    return res.json({ success: true, escrow });
+    const adminWalletDsp = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+    return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDsp) });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Unable to open dispute." });
   }
 });
 
-app.post("/api/escrow/:id/dispute/response", async (req, res) => {
+app.post("/api/escrow/:id/dispute/response", requireAuth(), async (req, res) => {
   try {
-    const { wallet, statement, files } = req.body || {};
+    const { statement, files } = req.body || {};
+    const wallet = req.auth.address; // PR-3: use JWT address
     const allEscrows = await loadEscrows();
     const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
     if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
@@ -1747,10 +1916,11 @@ app.post("/api/escrow/:id/dispute/response", async (req, res) => {
     if (side === escrow.dispute.openedBySide) return res.status(400).json({ success: false, message: "Wait for the other party's response before adding more evidence." });
     if (!String(statement || "").trim()) return res.status(400).json({ success: false, message: "A written response is required." });
     const evidence = await saveEvidenceFiles(escrow.escrowId, side, files);
-    escrow.dispute.responses.push({ side, wallet: String(wallet).toLowerCase(), statement: String(statement).trim().slice(0, 4000), submittedAt: Date.now(), evidence });
+    escrow.dispute.responses.push({ side, wallet: wallet.toLowerCase(), statement: String(statement).trim().slice(0, 4000), submittedAt: Date.now(), evidence });
     escrow.dispute.status = "Under review";
     await saveEscrows(allEscrows);
-    return res.json({ success: true, escrow });
+    const adminWalletDsr = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+    return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDsr) });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Unable to submit response." });
   }
@@ -1772,40 +1942,47 @@ function addDisputeMessage(escrow, from, wallet, text) {
   return true;
 }
 
-app.post("/api/escrow/:id/dispute/message", async (req, res) => {
-  const { wallet, text } = req.body || {};
+app.post("/api/escrow/:id/dispute/message", requireAuth(), async (req, res) => {
+  const { text } = req.body || {};
+  const wallet = req.auth.address; // PR-3: use JWT address
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
   if (!isEscrowParticipant(escrow, wallet)) return res.status(403).json({ success: false, message: "Only escrow participants can send messages." });
   if (!addDisputeMessage(escrow, participantSide(escrow, wallet), wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
   await saveEscrows(allEscrows);
-  return res.json({ success: true, escrow });
+  const adminWalletDsm = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDsm) });
 });
 
-app.post("/api/admin/disputes/:id/message", async (req, res) => {
-  const { wallet, text } = req.body || {};
-  if (!isDisputeAdmin(wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
+app.post("/api/admin/disputes/:id/message", requireAuth("admin"), async (req, res) => {
+  const { text } = req.body || {};
+  const wallet = req.auth.address; // PR-3: use JWT address (admin re-checked by requireAuth)
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
   if (!addDisputeMessage(escrow, "admin", wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
   await saveEscrows(allEscrows);
-  return res.json({ success: true, escrow });
+  const adminWalletAdm = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletAdm) });
 });
 
-app.get("/api/escrow/:id/dispute", async (req, res) => {
+app.get("/api/escrow/:id/dispute", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address; // PR-3: use JWT address
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute) return res.status(404).json({ success: false, message: "Dispute not found." });
-  if (!isEscrowParticipant(escrow, req.query.wallet)) return res.status(403).json({ success: false, message: "This case is private." });
-  return res.json({ success: true, dispute: escrow.dispute, escrow });
+  const adminWalletDspG = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  const isAdmin = wallet.toLowerCase() === adminWalletDspG;
+  if (!isEscrowParticipant(escrow, wallet) && !isAdmin) return res.status(403).json({ success: false, message: "This case is private." });
+  return res.json({ success: true, dispute: escrow.dispute, escrow: sanitizeEscrow(escrow, wallet, adminWalletDspG) });
 });
 
-app.get("/api/escrow/:id/dispute/evidence/:fileId", async (req, res) => {
+app.get("/api/escrow/:id/dispute/evidence/:fileId", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address; // PR-3: use JWT address
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
-  if (!escrow?.dispute || (!isEscrowParticipant(escrow, req.query.wallet) && !isDisputeAdmin(req.query.wallet))) return res.sendStatus(403);
+  if (!escrow?.dispute || (!isEscrowParticipant(escrow, wallet) && !isDisputeAdmin(wallet))) return res.sendStatus(403);
   const entries = [...escrow.dispute.evidence, ...escrow.dispute.responses.flatMap((response) => response.evidence || [])];
   const file = entries.find((entry) => entry.id === req.params.fileId);
   if (!file) return res.sendStatus(404);
@@ -1823,23 +2000,27 @@ function isDisputeAdmin(wallet) {
   return Boolean(configured) && configured === String(wallet || "").toLowerCase();
 }
 
-app.get("/api/admin/disputes", async (req, res) => {
-  if (!isDisputeAdmin(req.query.wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
+app.get("/api/admin/disputes", requireAuth("admin"), async (req, res) => {
+  // PR-3: admin re-checked by requireAuth("admin"); body wallet field removed.
   const network = getRequestNetwork(req);
   const allEscrows = await loadEscrows();
   const withDispute = allEscrows.filter((escrow) => escrow.dispute && escrowNetwork(escrow) === network);
+  const adminWalletAdmG = req.auth.address.toLowerCase();
   return res.json({
     success: true,
-    disputes: withDispute.filter((escrow) => escrow.status === "Disputed"),
+    disputes: withDispute
+      .filter((escrow) => escrow.status === "Disputed")
+      .map((e) => sanitizeEscrow(e, adminWalletAdmG, adminWalletAdmG)),
     resolved: withDispute
       .filter((escrow) => escrow.dispute.resolution)
-      .sort((a, b) => b.dispute.resolution.resolvedAt - a.dispute.resolution.resolvedAt),
+      .sort((a, b) => b.dispute.resolution.resolvedAt - a.dispute.resolution.resolvedAt)
+      .map((e) => sanitizeEscrow(e, adminWalletAdmG, adminWalletAdmG)),
   });
 });
 
-app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
-  const { wallet, buyerAmount, transactionHash, note } = req.body || {};
-  if (!isDisputeAdmin(wallet)) return res.status(403).json({ success: false, message: "ProofPay admin access required." });
+app.post("/api/admin/disputes/:id/resolved", requireAuth("admin"), async (req, res) => {
+  const { buyerAmount, transactionHash, note } = req.body || {};
+  const wallet = req.auth.address; // PR-3: use JWT address
   if (!/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) return res.status(400).json({ success: false, message: "A confirmed on-chain resolution transaction is required." });
 
   const allEscrows = await loadEscrows();
@@ -1912,7 +2093,8 @@ app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
     resolvedBy: String(wallet).toLowerCase(),
   };
   await saveEscrows(allEscrows);
-  return res.json({ success: true, escrow });
+  const adminWalletRes = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletRes) });
 });
 
 /*
@@ -1921,8 +2103,7 @@ app.post("/api/admin/disputes/:id/resolved", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow/:id/cancel", async (req, res) => {
-  const { buyerWallet } = req.body;
+app.post("/api/escrow/:id/cancel", requireAuth(), async (req, res) => {
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
 
@@ -1943,11 +2124,9 @@ app.post("/api/escrow/:id/cancel", async (req, res) => {
     });
   }
 
-  if (
-    buyerWallet &&
-    escrow.buyerWallet &&
-    buyerWallet.toLowerCase() !== escrow.buyerWallet.toLowerCase()
-  ) {
+  // PR-3: use JWT address instead of body buyerWallet
+  if (escrow.buyerWallet &&
+      req.auth.address.toLowerCase() !== escrow.buyerWallet.toLowerCase()) {
     return res.status(403).json({
       success: false,
       message: "Only the buyer wallet can cancel this escrow.",
@@ -1960,7 +2139,8 @@ app.post("/api/escrow/:id/cancel", async (req, res) => {
   escrows[req.params.id] = escrow;
   await saveEscrows(allEscrows);
 
-  return res.json({ success: true, escrow });
+  const adminWalletCan = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletCan) });
 });
 
 /*
@@ -1969,8 +2149,7 @@ app.post("/api/escrow/:id/cancel", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow/:id/reject", async (req, res) => {
-  const { sellerWallet } = req.body;
+app.post("/api/escrow/:id/reject", requireAuth(), async (req, res) => {
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
 
@@ -1985,14 +2164,27 @@ app.post("/api/escrow/:id/reject", async (req, res) => {
     });
   }
 
+  // PR-3: if the escrow is locked to a specific seller, only that wallet can
+  // reject it. An authenticated-but-wrong wallet must not be able to reject
+  // someone else's locked deal.
+  if (escrow.expectedSeller &&
+      req.auth.address.toLowerCase() !== escrow.expectedSeller.toLowerCase()) {
+    return res.status(403).json({
+      success: false,
+      message: "This deal was locked for a different wallet address.",
+    });
+  }
+
   escrow.status = "Cancelled";
   escrow.cancellationReason = "Rejected by Seller";
-  escrow.sellerWallet = sellerWallet || escrow.sellerWallet || "";
+  // PR-3: JWT address is the proof of ownership; keep existing sellerWallet if set
+  escrow.sellerWallet = req.auth.address || escrow.sellerWallet || "";
   escrow.cancelledAt = Date.now();
   escrows[req.params.id] = escrow;
   await saveEscrows(allEscrows);
 
-  return res.json({ success: true, escrow });
+  const adminWalletRej = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, req.auth.address, adminWalletRej) });
 });
 
 /*

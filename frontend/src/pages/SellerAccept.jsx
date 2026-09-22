@@ -62,12 +62,35 @@ export default function SellerAccept() {
   }, [id, navigate, setEscrowData]);
 
   async function handleConnectWallet() {
+    // PR-3: front-end pre-check — if the escrow is locked to a specific seller,
+    // check the currently connected wallet before triggering the signature prompt.
+    const lockedSeller = (escrowData.expectedSeller || "").toLowerCase();
+    if (lockedSeller) {
+      // Try to read the currently connected wallet without a new prompt.
+      const knownAddress =
+        localStorage.getItem("proofpay-wallet") ||
+        (window.ethereum
+          ? await window.ethereum.request({ method: "eth_accounts" }).then((a) => a?.[0] || "").catch(() => "")
+          : "");
+      if (knownAddress && knownAddress.toLowerCase() !== lockedSeller) {
+        setError("This deal was locked for a different wallet address. It can only be accepted by the seller the buyer specified.");
+        return;
+      }
+    }
+
     try {
       setConnecting(true);
       setError("");
       const { address } = await connectWalletWithOptions({
         requireSignature: true,
       });
+
+      // Post-connect check in case the user switched accounts during the prompt.
+      if (lockedSeller && address.toLowerCase() !== lockedSeller) {
+        setError("This deal was locked for a different wallet address. It can only be accepted by the seller the buyer specified.");
+        return;
+      }
+
       setSellerWallet(address);
       setSellerDisplayName(getProfileName(address) || escrowData.sellerName || "");
       setSellerEmail(getProfileEmail(address));
@@ -168,6 +191,15 @@ export default function SellerAccept() {
                 {escrow.productId && <SummaryRow label="Product ID" value={escrow.productId} />}
                 {escrow.description && <SummaryRow label="Order details" value={escrow.description} />}
                 <SummaryRow label="Amount" value={escrow.amount ? `${escrow.amount} ${escrow.assetSymbol || "USDC"}` : "—"} />
+                {escrow.expectedSeller && (
+                  <SummaryRow
+                    label="Locked for"
+                    value={shortenAddress(escrow.expectedSeller)}
+                    copyValue={escrow.expectedSeller}
+                    valueClassName="font-mono text-blue-700"
+                    copyable
+                  />
+                )}
                 <SummaryRow label="Status" value="Awaiting your review" valueClassName="text-amber-700" />
               </div>
             </div>
