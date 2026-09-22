@@ -32,6 +32,15 @@ export default function AdminLogin() {
       setConnecting(true);
       setError("");
       await connectWalletWithOptions({ requireSignature: true });
+      // connectWalletWithOptions can resolve without actually storing a
+      // session JWT (e.g. a Circle wallet's own /wallet/connect call fails
+      // for a reason its own catch block doesn't treat as fatal). Check
+      // here instead of silently advancing to a step that will then fail
+      // with a confusing "no token" error.
+      if (!localStorage.getItem("proofpay-jwt")) {
+        setError("Wallet connected, but sign-in did not complete. Please try connecting again.");
+        return;
+      }
       setStep("password");
     } catch (connectError) {
       if (connectError?.code === 4001) return;

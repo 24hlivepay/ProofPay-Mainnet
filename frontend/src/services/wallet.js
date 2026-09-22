@@ -143,14 +143,21 @@ export async function connectWalletWithOptions({
         if (jwt) {
           localStorage.setItem("proofpay-jwt", jwt);
         }
-        // Circle 155104 expired
-        if (connectRes.data?.code === "CIRCLE_EXPIRED") {
-          throw new Error("Your Circle session has expired. Sign in with email again.");
-        }
       } catch (err) {
-        // If the error message is the Circle expiry, re-throw it
-        if (/circle session has expired/i.test(err?.message || "")) throw err;
-        // Other connect failures (network down, etc.) don't block session
+        // The backend rejects an expired/invalid/unknown Circle userToken
+        // with a 401 and { message, circleExpired } -- that message lives on
+        // err.response.data, not err.message (axios's own generic wrapper
+        // text, e.g. "Request failed with status code 401"). Checking the
+        // wrong field meant this branch never matched, so an expired Circle
+        // session failed silently: no JWT stored, no error shown, callers
+        // (like the admin sign-in flow) had no way to tell connect actually
+        // failed until a later, unrelated-looking "no token" error.
+        const backendMessage = err?.response?.data?.message;
+        if (err?.response?.data?.circleExpired || /circle session has expired/i.test(backendMessage || "")) {
+          throw new Error(backendMessage || "Your Circle session has expired. Sign in with email again.");
+        }
+        // Other connect failures (network down, etc.) don't block session --
+        // the caller still gets an address back, just no fresh JWT.
       }
     }
 
