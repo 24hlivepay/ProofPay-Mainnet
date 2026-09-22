@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import AdminNav from "../components/AdminNav";
 import { useWalletBadge } from "../hooks/useWalletBadge";
+import { useAdminGate } from "../hooks/useAdminGate";
 import api, { API_BASE_URL } from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { resolveDisputeOnChain } from "../services/proofpayContract";
@@ -9,13 +11,20 @@ import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
 
 export default function AdminDisputes() {
+  useAdminGate();
   const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const [cases, setCases] = useState([]); const [resolved, setResolved] = useState([]); const [error, setError] = useState(""); const [busy, setBusy] = useState("");
   const wallet = getConnectedWallet();
   const load = () => api.get("/admin/disputes", { params: { wallet } })
     .then((r) => { setCases(r.data.disputes); setResolved(r.data.resolved || []); })
-    .catch((e) => setError(e.response?.data?.message || "Unable to load cases."));
+    .catch((e) => {
+      if (e.response?.status === 401 || e.response?.status === 403) {
+        navigate("/admin/login", { replace: true, state: { redirectTo: "/admin/disputes" } });
+        return;
+      }
+      setError(e.response?.data?.message || "Unable to load cases.");
+    });
   useEffect(() => { load(); }, []);
   async function sendMessage(escrow, text) {
     try { setError("");
@@ -30,7 +39,7 @@ export default function AdminDisputes() {
       load();
     } catch (e) { setError(e.response?.data?.message || e.message || "Resolution failed."); } finally { setBusy(""); }
   }
-  return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-5xl px-5 py-8"><button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">← Back to Dashboard</button><h1 className="mt-4 text-3xl font-bold text-slate-900">ProofPay dispute administration</h1><p className="mt-2 text-slate-600">Funds are held by the contract. Your resolution transaction sends them directly to the buyer and/or seller.</p>{error && <p className="mt-5 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}<div className="mt-8 space-y-6">{cases.length === 0 && <p className="rounded-2xl bg-white p-8 text-slate-600">No active disputes.</p>}{cases.map((escrow) => <Case key={escrow.escrowId} escrow={escrow} wallet={wallet} busy={busy === escrow.escrowId} resolve={resolve} sendMessage={sendMessage} />)}</div>{resolved.length > 0 && <div className="mt-12"><h2 className="text-2xl font-bold text-slate-900">Resolved disputes</h2><p className="mt-1 text-slate-600">Your own record of past decisions.</p><div className="mt-4 space-y-4">{resolved.map((escrow) => <ResolvedCase key={escrow.escrowId} escrow={escrow} wallet={wallet} />)}</div></div>}</main></div>;
+  return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-5xl px-5 py-8"><button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">← Back to Dashboard</button><h1 className="mt-4 text-3xl font-bold text-slate-900">ProofPay dispute administration</h1><p className="mt-2 text-slate-600">Funds are held by the contract. Your resolution transaction sends them directly to the buyer and/or seller.</p><AdminNav />{error &&<p className="mt-5 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}<div className="mt-8 space-y-6">{cases.length === 0 && <p className="rounded-2xl bg-white p-8 text-slate-600">No active disputes.</p>}{cases.map((escrow) => <Case key={escrow.escrowId} escrow={escrow} wallet={wallet} busy={busy === escrow.escrowId} resolve={resolve} sendMessage={sendMessage} />)}</div>{resolved.length > 0 && <div className="mt-12"><h2 className="text-2xl font-bold text-slate-900">Resolved disputes</h2><p className="mt-1 text-slate-600">Your own record of past decisions.</p><div className="mt-4 space-y-4">{resolved.map((escrow) => <ResolvedCase key={escrow.escrowId} escrow={escrow} wallet={wallet} />)}</div></div>}</main></div>;
 }
 
 function ResolvedCase({ escrow, wallet }) {

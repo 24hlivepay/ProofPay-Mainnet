@@ -29,6 +29,22 @@ import {
   verifyJwt,
   sanitizeEscrow,
 } from "./lib/auth.js";
+import {
+  verifyAdminPassword,
+  generateOtp,
+  sendOtpEmail,
+  getAdminState,
+  saveAdminState,
+  recordPasswordAttempt,
+  isPasswordLocked,
+  hasFreshPasswordVerification,
+  issueOtpState,
+  isOtpLocked,
+  isOtpResendCoolingDown,
+  recordOtpAttempt,
+  logAdminAction,
+  getAuditLog,
+} from "./lib/adminAuth.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -121,6 +137,20 @@ function tryAuth(req, _res, next) {
   next();
 }
 
+// Admin 2FA gate: password + email OTP, checked on top of requireAuth("admin")
+// proving wallet ownership. Chain both middlewares: requireAuth("admin"),
+// requireFullAdmin. The extra claim is only set on the short-lived JWT
+// issued by /api/admin/verify-otp after a fresh password+OTP cycle.
+function requireFullAdmin(req, res, next) {
+  if (!req.auth?.adminFullyVerified) {
+    return res.status(403).json({
+      error: "2fa required",
+      message: "Complete admin sign-in (password + email code) first.",
+    });
+  }
+  next();
+}
+
 const CIRCLE_API_URL = "https://api.circle.com";
 
 // Circle API key, per network — each Arc network has its own Circle
@@ -191,6 +221,8 @@ const dataDirectory = process.env.DATA_DIR ||
 fs.mkdirSync(dataDirectory, { recursive: true });
 const dataFile = path.join(dataDirectory, "escrows.json");
 const walletConnectionsFile = path.join(dataDirectory, "wallet-connections.json");
+const adminStateFile = path.join(dataDirectory, "admin-2fa-state.json");
+const adminAuditLogFile = path.join(dataDirectory, "admin-audit-log.json");
 const evidenceDirectory = path.join(dataDirectory, "evidence");
 const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
@@ -488,6 +520,35 @@ async function saveWalletConnections(connections) {
   }
 
   fs.writeFileSync(walletConnectionsFile, JSON.stringify(connections, null, 2));
+}
+
+// ── Admin 2FA + audit log local-file helpers (used only without DATABASE_URL) ─
+function readAdminStateLocal() {
+  try {
+    if (!fs.existsSync(adminStateFile)) return null;
+    return JSON.parse(fs.readFileSync(adminStateFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeAdminStateLocal(state) {
+  fs.writeFileSync(adminStateFile, JSON.stringify(state, null, 2));
+}
+
+function readAdminAuditLogLocal() {
+  try {
+    if (!fs.existsSync(adminAuditLogFile)) return [];
+    return JSON.parse(fs.readFileSync(adminAuditLogFile, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function appendAdminAuditLogLocal(entry) {
+  const entries = readAdminAuditLogLocal();
+  entries.push(entry);
+  fs.writeFileSync(adminAuditLogFile, JSON.stringify(entries, null, 2));
 }
 
 // ── PR-2: nonce endpoint ─────────────────────────────────────────────────────
@@ -1955,7 +2016,7 @@ app.post("/api/escrow/:id/dispute/message", requireAuth(), async (req, res) => {
   return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDsm) });
 });
 
-app.post("/api/admin/disputes/:id/message", requireAuth("admin"), async (req, res) => {
+app.post("/api/admin/disputes/:id/message", requireAuth("admin"), requireFullAdmin, async (req, res) => {
   const { text } = req.body || {};
   const wallet = req.auth.address; // PR-3: use JWT address (admin re-checked by requireAuth)
   const allEscrows = await loadEscrows();
@@ -1963,6 +2024,11 @@ app.post("/api/admin/disputes/:id/message", requireAuth("admin"), async (req, re
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
   if (!addDisputeMessage(escrow, "admin", wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
   await saveEscrows(allEscrows);
+  await logAdminAction(
+    databasePool,
+    { adminWallet: wallet, action: "dispute.message", escrowId: escrow.escrowId, details: { textLength: String(text || "").length } },
+    appendAdminAuditLogLocal
+  );
   const adminWalletAdm = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletAdm) });
 });
@@ -2000,7 +2066,137 @@ function isDisputeAdmin(wallet) {
   return Boolean(configured) && configured === String(wallet || "").toLowerCase();
 }
 
-app.get("/api/admin/disputes", requireAuth("admin"), async (req, res) => {
+// ---------------------------------------------------------------------------
+// Admin 2FA: password + email OTP, on top of requireAuth("admin") (wallet
+// proof). Every step here still requires a valid admin-wallet JWT -- this is
+// a second factor, not a replacement for wallet auth.
+// ---------------------------------------------------------------------------
+
+async function loadAdminState() {
+  return getAdminState(databasePool, readAdminStateLocal());
+}
+
+async function persistAdminState(state) {
+  await saveAdminState(databasePool, state, writeAdminStateLocal);
+}
+
+app.post("/api/admin/verify-password", requireAuth("admin"), async (req, res) => {
+  const { password } = req.body || {};
+  const hash = process.env.ADMIN_PASSWORD_HASH;
+  if (!hash) {
+    return res.status(503).json({ success: false, message: "Admin sign-in is not fully configured yet." });
+  }
+
+  const state = await loadAdminState();
+  if (isPasswordLocked(state)) {
+    return res.status(429).json({
+      success: false,
+      message: "Too many wrong attempts. Try again in a few minutes.",
+    });
+  }
+
+  const ok = await verifyAdminPassword(password, hash);
+  const nextState = recordPasswordAttempt(state, ok);
+  await persistAdminState(nextState);
+
+  if (!ok) {
+    return res.status(401).json({ success: false, message: "Incorrect password." });
+  }
+  return res.json({ success: true });
+});
+
+app.post("/api/admin/send-otp", requireAuth("admin"), async (req, res) => {
+  const resendKey = process.env.RESEND_API_KEY;
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!resendKey || !adminEmail) {
+    return res.status(503).json({ success: false, message: "Admin sign-in is not fully configured yet." });
+  }
+
+  const state = await loadAdminState();
+  if (!hasFreshPasswordVerification(state)) {
+    return res.status(403).json({ success: false, message: "Verify your password again first." });
+  }
+  if (isOtpResendCoolingDown(state)) {
+    return res.status(429).json({ success: false, message: "Wait a moment before requesting another code." });
+  }
+
+  const otp = generateOtp();
+  const nextState = issueOtpState(state, otp);
+
+  try {
+    await sendOtpEmail(otp, { apiKey: resendKey, toEmail: adminEmail });
+  } catch (err) {
+    console.error("[ProofPay] admin OTP email failed:", err?.message);
+    return res.status(502).json({ success: false, message: "Could not send the code. Try again shortly." });
+  }
+
+  await persistAdminState(nextState);
+  return res.json({ success: true, message: "Code sent." });
+});
+
+app.post("/api/admin/verify-otp", requireAuth("admin"), async (req, res) => {
+  const { otp } = req.body || {};
+  const state = await loadAdminState();
+
+  if (isOtpLocked(state)) {
+    return res.status(429).json({ success: false, message: "Too many wrong codes. Try again in a few minutes." });
+  }
+
+  const { ok, state: nextState, expired } = recordOtpAttempt(state, otp);
+  await persistAdminState(nextState);
+
+  if (!ok) {
+    return res.status(401).json({
+      success: false,
+      message: expired ? "That code expired. Request a new one." : "Incorrect code.",
+    });
+  }
+
+  const token = issueJwt(
+    { address: req.auth.address, network: req.auth.network, isAdmin: true, adminFullyVerified: true },
+    SESSION_SECRET,
+    "1h"
+  );
+  return res.json({ success: true, token });
+});
+
+app.get("/api/admin/escrows", requireAuth("admin"), requireFullAdmin, async (req, res) => {
+  const network = getRequestNetwork(req);
+  const { search = "", status = "" } = req.query;
+  const allEscrows = await loadEscrows();
+  const normalizedSearch = String(search).trim().toLowerCase();
+
+  let filtered = allEscrows.filter((escrow) => escrowNetwork(escrow) === network);
+  if (status) filtered = filtered.filter((escrow) => escrow.status === status);
+  if (normalizedSearch) {
+    filtered = filtered.filter((escrow) =>
+      escrow.escrowId?.toLowerCase().includes(normalizedSearch) ||
+      escrow.buyerWallet?.toLowerCase().includes(normalizedSearch) ||
+      escrow.sellerWallet?.toLowerCase().includes(normalizedSearch) ||
+      escrow.buyerName?.toLowerCase().includes(normalizedSearch) ||
+      escrow.sellerName?.toLowerCase().includes(normalizedSearch)
+    );
+  }
+
+  filtered = filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 200);
+  const adminWalletEsc = req.auth.address.toLowerCase();
+  return res.json({
+    success: true,
+    escrows: filtered.map((e) => sanitizeEscrow(e, adminWalletEsc, adminWalletEsc)),
+  });
+});
+
+app.get("/api/admin/audit-log", requireAuth("admin"), requireFullAdmin, async (req, res) => {
+  const { escrowId, limit } = req.query;
+  const entries = await getAuditLog(
+    databasePool,
+    { limit: Number(limit) || 100, escrowId: escrowId || undefined },
+    readAdminAuditLogLocal()
+  );
+  return res.json({ success: true, entries });
+});
+
+app.get("/api/admin/disputes", requireAuth("admin"), requireFullAdmin, async (req, res) => {
   // PR-3: admin re-checked by requireAuth("admin"); body wallet field removed.
   const network = getRequestNetwork(req);
   const allEscrows = await loadEscrows();
@@ -2018,7 +2214,7 @@ app.get("/api/admin/disputes", requireAuth("admin"), async (req, res) => {
   });
 });
 
-app.post("/api/admin/disputes/:id/resolved", requireAuth("admin"), async (req, res) => {
+app.post("/api/admin/disputes/:id/resolved", requireAuth("admin"), requireFullAdmin, async (req, res) => {
   const { buyerAmount, transactionHash, note } = req.body || {};
   const wallet = req.auth.address; // PR-3: use JWT address
   if (!/^0x[a-fA-F0-9]{64}$/.test(transactionHash || "")) return res.status(400).json({ success: false, message: "A confirmed on-chain resolution transaction is required." });
@@ -2093,6 +2289,16 @@ app.post("/api/admin/disputes/:id/resolved", requireAuth("admin"), async (req, r
     resolvedBy: String(wallet).toLowerCase(),
   };
   await saveEscrows(allEscrows);
+  await logAdminAction(
+    databasePool,
+    {
+      adminWallet: wallet,
+      action: "dispute.resolved",
+      escrowId: escrow.escrowId,
+      details: { buyerAmount: String(buyerAmount), sellerAmount: escrow.dispute.resolution.sellerAmount, transactionHash },
+    },
+    appendAdminAuditLogLocal
+  );
   const adminWalletRes = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletRes) });
 });

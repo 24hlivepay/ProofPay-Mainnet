@@ -23,6 +23,9 @@ import Dispute from "../pages/Dispute";
 import DisputeResponse from "../pages/DisputeResponse";
 import MyDisputes from "../pages/MyDisputes";
 import AdminDisputes from "../pages/AdminDisputes";
+import AdminLogin from "../pages/AdminLogin";
+import AdminEscrows from "../pages/AdminEscrows";
+import AdminAuditLog from "../pages/AdminAuditLog";
 import OrderHistory from "../pages/OrderHistory";
 import Profile from "../pages/Profile";
 import PendingOrders from "../pages/PendingOrders";
@@ -92,7 +95,10 @@ export default function AppRoutes() {
       <Route path="/dispute" element={<Dispute />} />
       <Route path="/dispute/respond" element={<DisputeResponse />} />
       <Route path="/disputes" element={<MyDisputes />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin/disputes" element={<AdminDisputes />} />
+      <Route path="/admin/escrows" element={<AdminEscrows />} />
+      <Route path="/admin/audit-log" element={<AdminAuditLog />} />
 
       {/* Seller */}
       <Route path="/seller-landing" element={<SellerLanding />} />
