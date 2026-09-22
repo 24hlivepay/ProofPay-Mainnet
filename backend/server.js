@@ -95,7 +95,7 @@ function requireAuth(role) {
     if (!token) {
       return res.status(401).json({ error: "no token", message: "Please connect and sign in with your wallet, then try again." });
     }
-    const payload = verifyJwt(token);
+    const payload = verifyJwt(token, SESSION_SECRET, SESSION_SECRET_PREV);
     if (!payload) {
       return res.status(401).json({ error: "invalid or expired token", message: "Your session has expired. Please reconnect your wallet and try again." });
     }
