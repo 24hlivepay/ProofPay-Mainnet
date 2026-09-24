@@ -226,13 +226,17 @@ export async function connectWalletWithOptions({
     if (nonceData?.nonce) {
       // SIWE / EIP-4361 style message — backend verifies with verifyEoaSignature()
       const network = getNetworkConfig();
+      // domain/URI must equal the page's real origin: wallets compare them and
+      // show a red "Review alert" phishing warning on any mismatch (the site
+      // is served from www.proofpay.online, so a hardcoded apex domain always
+      // tripped it). The backend allowlist decides which hosts are accepted.
       message = [
-        `proofpay.online wants you to sign in with your Ethereum account:`,
+        `${window.location.host} wants you to sign in with your Ethereum account:`,
         address,
         "",
         "Sign in to ProofPay. This does not create a transaction.",
         "",
-        `URI: https://proofpay.online`,
+        `URI: ${window.location.origin}`,
         `Version: 1`,
         `Chain ID: ${network.chainId}`,
         `Nonce: ${nonceData.nonce}`,
