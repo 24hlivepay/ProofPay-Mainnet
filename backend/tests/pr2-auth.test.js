@@ -242,6 +242,46 @@ describe("Suite 4 — verifyEoaSignature", async () => {
     assert.equal(result.code, "DOMAIN_MISMATCH");
   });
 
+  test("allowed host with a port (localhost:5173) is accepted", async () => {
+    const nonce = "portnonce01";
+    const store = { [nonce]: Date.now() + 60_000 };
+    const msg = buildSiweMessage({
+      domain: "localhost:5173",
+      address: TEST_WALLET.address,
+      chainId: 5042,
+      nonce,
+    });
+    const sig = await TEST_WALLET.signMessage(msg);
+    const result = await verifyEoaSignature({
+      address: TEST_WALLET.address,
+      message: msg,
+      signature: sig,
+      nonceStore: store,
+      allowedDomains: ALLOWED_DOMAINS,
+    });
+    assert.equal(result.address, TEST_ADDRESS);
+  });
+
+  test("a port does not launder a disallowed host (evil.com:443 still rejected)", async () => {
+    const nonce = "portnonce02";
+    const store = { [nonce]: Date.now() + 60_000 };
+    const msg = buildSiweMessage({
+      domain: "evil.com:443",
+      address: TEST_WALLET.address,
+      chainId: 5042,
+      nonce,
+    });
+    const sig = await TEST_WALLET.signMessage(msg);
+    const result = await verifyEoaSignature({
+      address: TEST_WALLET.address,
+      message: msg,
+      signature: sig,
+      nonceStore: store,
+      allowedDomains: ALLOWED_DOMAINS,
+    });
+    assert.equal(result.code, "DOMAIN_MISMATCH");
+  });
+
   test("message that names a different address than the signer is rejected", async () => {
     const nonce = "addrmismatch1";
     const store = { [nonce]: Date.now() + 60_000 };

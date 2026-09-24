@@ -266,8 +266,9 @@ export async function verifyEoaSignature(
     return { error: "Message address does not match the wallet address.", code: "BAD_SIG" };
   }
 
-  // Domain check.
-  if (!resolvedAllowedDomains.includes(parsed.domain)) {
+  // Domain check. EIP-4361's domain is the authority and may carry a port
+  // (e.g. localhost:5173 in dev); the allowlist holds bare hostnames.
+  if (!resolvedAllowedDomains.includes(parsed.domain.replace(/:\d+$/, ""))) {
     return { error: `Domain '${parsed.domain}' is not allowed.`, code: "DOMAIN_MISMATCH" };
   }
 
