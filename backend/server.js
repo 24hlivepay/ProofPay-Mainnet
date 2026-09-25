@@ -2052,6 +2052,20 @@ function allDisputeEvidence(dispute) {
   ];
 }
 
+// Validates the per-case cap, then stores attached files for a message.
+// Returns { evidence } or { error } (never throws).
+async function attachMessageEvidence(escrow, side, files) {
+  if (!Array.isArray(files) || files.length === 0) return { evidence: [] };
+  if (allDisputeEvidence(escrow.dispute).length + files.length > MAX_DISPUTE_EVIDENCE_TOTAL) {
+    return { error: `This case already has the maximum of ${MAX_DISPUTE_EVIDENCE_TOTAL} evidence files.` };
+  }
+  try {
+    return { evidence: await saveEvidenceFiles(escrow.escrowId, side, files) };
+  } catch (error) {
+    return { error: error.message || "Unable to attach files." };
+  }
+}
+
 // A message may be text, files, or both -- but not empty.
 function addDisputeMessage(escrow, from, wallet, text, evidence = []) {
   const clean = String(text || "").trim().slice(0, 2000);
@@ -2076,17 +2090,8 @@ app.post("/api/escrow/:id/dispute/message", requireAuth(), async (req, res) => {
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
   if (!isEscrowParticipant(escrow, wallet)) return res.status(403).json({ success: false, message: "Only escrow participants can send messages." });
   const side = participantSide(escrow, wallet);
-  let evidence = [];
-  if (Array.isArray(files) && files.length > 0) {
-    if (allDisputeEvidence(escrow.dispute).length + files.length > MAX_DISPUTE_EVIDENCE_TOTAL) {
-      return res.status(400).json({ success: false, message: `This case already has the maximum of ${MAX_DISPUTE_EVIDENCE_TOTAL} evidence files.` });
-    }
-    try {
-      evidence = await saveEvidenceFiles(escrow.escrowId, side, files);
-    } catch (error) {
-      return res.status(400).json({ success: false, message: error.message || "Unable to attach files." });
-    }
-  }
+  const { evidence, error: attachError } = await attachMessageEvidence(escrow, side, files);
+  if (attachError) return res.status(400).json({ success: false, message: attachError });
   if (!addDisputeMessage(escrow, side, wallet, text, evidence)) return res.status(400).json({ success: false, message: "Write a message or attach a file first." });
   await saveEscrows(allEscrows);
   const adminWalletDsm = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
@@ -2094,16 +2099,18 @@ app.post("/api/escrow/:id/dispute/message", requireAuth(), async (req, res) => {
 });
 
 app.post("/api/admin/disputes/:id/message", requireAuth("admin"), requireFullAdmin, async (req, res) => {
-  const { text } = req.body || {};
+  const { text, files } = req.body || {};
   const wallet = req.auth.address; // PR-3: use JWT address (admin re-checked by requireAuth)
   const allEscrows = await loadEscrows();
   const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
   if (!escrow?.dispute || escrow.status !== "Disputed") return res.status(404).json({ success: false, message: "Active dispute not found." });
-  if (!addDisputeMessage(escrow, "admin", wallet, text)) return res.status(400).json({ success: false, message: "Write a message first." });
+  const { evidence, error: attachError } = await attachMessageEvidence(escrow, "admin", files);
+  if (attachError) return res.status(400).json({ success: false, message: attachError });
+  if (!addDisputeMessage(escrow, "admin", wallet, text, evidence)) return res.status(400).json({ success: false, message: "Write a message or attach a file first." });
   await saveEscrows(allEscrows);
   await logAdminAction(
     databasePool,
-    { adminWallet: wallet, action: "dispute.message", escrowId: escrow.escrowId, details: { textLength: String(text || "").length } },
+    { adminWallet: wallet, action: "dispute.message", escrowId: escrow.escrowId, details: { textLength: String(text || "").length, attachments: evidence.length } },
     appendAdminAuditLogLocal
   );
   const adminWalletAdm = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
