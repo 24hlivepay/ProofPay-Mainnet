@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { openEvidence, readEvidenceFiles } from "../utils/evidence";
+import { applyMention, filterParties, findMentionQuery, insertMentionAtCaret, splitMentions } from "../utils/disputeMentions";
 
 const SENDER_STYLES = {
   admin: { label: "ProofPay admin", box: "border-blue-200 bg-blue-50", name: "text-blue-800" },
@@ -13,7 +14,14 @@ function formatTime(timestamp) {
 
 // onSend(text, files) -- files is only populated when allowFiles is set.
 // escrowId is needed to open message attachments.
-export default function DisputeThread({ messages = [], onSend, placeholder, sendLabel = "Send message", collapseAfter, escrowId, allowFiles = false }) {
+// parties (from buildDisputeParties) + selfKey turn on "@" addressing: typing
+// "@" or tapping a name inserts "@Name (Role)" for the other two people, and
+// mentions are highlighted in every message.
+export default function DisputeThread({ messages = [], onSend, placeholder, sendLabel = "Send message", collapseAfter, escrowId, allowFiles = false, parties, selfKey }) {
+  const textareaRef = useRef(null);
+  const [caret, setCaret] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -23,6 +31,48 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
   const canCollapse = Number.isFinite(collapseAfter) && messages.length > collapseAfter;
   const visibleMessages = canCollapse && !expanded ? messages.slice(0, collapseAfter) : messages;
   const canSend = Boolean(text.trim() || files.length > 0) && !sending;
+
+  const mention = parties ? findMentionQuery(text, caret) : null;
+  const suggestions = mention && !menuDismissed ? filterParties(parties, selfKey, mention.query) : [];
+  const quickParties = parties ? filterParties(parties, selfKey) : [];
+
+  function place(nextText, nextCaret) {
+    setText(nextText);
+    setCaret(nextCaret);
+    setActiveIndex(0);
+    setMenuDismissed(false);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCaret, nextCaret);
+    });
+  }
+
+  function pickSuggestion(party) {
+    const next = applyMention(text, caret, mention.start, party.insert);
+    place(next.text, next.caret);
+  }
+
+  function insertQuick(party) {
+    const at = textareaRef.current?.selectionStart ?? text.length;
+    const next = insertMentionAtCaret(text, at, party.insert);
+    place(next.text, next.caret);
+  }
+
+  function handleKeyDown(event) {
+    if (suggestions.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % suggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => (index - 1 + suggestions.length) % suggestions.length);
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      pickSuggestion(suggestions[Math.min(activeIndex, suggestions.length - 1)]);
+    } else if (event.key === "Escape") {
+      setMenuDismissed(true);
+    }
+  }
 
   async function handleSend() {
     if (!canSend) return;
@@ -69,7 +119,15 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
                   <span className={`font-semibold ${style.name}`}>{style.label}</span>
                   <span className="text-xs text-slate-500">{formatTime(message.sentAt)}</span>
                 </div>
-                {message.text && <p className="mt-1 whitespace-pre-wrap text-slate-800">{message.text}</p>}
+                {message.text && (
+                  <p className="mt-1 whitespace-pre-wrap text-slate-800">
+                    {splitMentions(message.text, parties || []).map((piece, pieceIndex) =>
+                      piece.mention
+                        ? <span key={pieceIndex} className="font-semibold text-blue-700">{piece.text}</span>
+                        : piece.text
+                    )}
+                  </p>
+                )}
                 {message.evidence?.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {message.evidence.map((file) => (
@@ -101,13 +159,56 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
 
       {onSend && (
         <div className="mt-3">
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={2}
-            placeholder={placeholder}
-            className="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-blue-500"
-          />
+          {quickParties.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-500">Address to:</span>
+              {quickParties.map((party) => (
+                <button
+                  key={party.key}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertQuick(party)}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  {party.insert}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                setCaret(event.target.selectionStart ?? event.target.value.length);
+                setActiveIndex(0);
+                setMenuDismissed(false);
+              }}
+              onKeyDown={handleKeyDown}
+              onKeyUp={(event) => setCaret(event.target.selectionStart ?? text.length)}
+              onClick={(event) => setCaret(event.target.selectionStart ?? text.length)}
+              rows={2}
+              placeholder={placeholder}
+              className="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-blue-500"
+            />
+            {suggestions.length > 0 && (
+              <ul role="listbox" className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                {suggestions.map((party, index) => (
+                  <li key={party.key} role="option" aria-selected={index === activeIndex}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => { event.preventDefault(); pickSuggestion(party); }}
+                      className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${index === activeIndex ? "bg-blue-50" : "hover:bg-slate-50"}`}
+                    >
+                      <span className="font-semibold text-slate-900">{party.name || party.role}</span>
+                      {party.name && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{party.role}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {allowFiles && (
             <div className="mt-2">
               <input

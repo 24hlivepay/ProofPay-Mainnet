@@ -7,6 +7,7 @@ import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
 import { openEvidence } from "../utils/evidence";
+import { buildDisputeParties } from "../utils/disputeMentions";
 
 const MAX_SIZE = 2 * 1024 * 1024;
 
@@ -123,6 +124,8 @@ export default function DisputeResponse() {
           onSend={resolution || canRespond ? undefined : sendMessage}
           allowFiles
           escrowId={order.escrowId}
+          parties={buildDisputeParties(order)}
+          selfKey={mySide}
           collapseAfter={resolution ? 3 : undefined}
           placeholder="Reply to ProofPay admin or the other party."
         />
