@@ -62,6 +62,7 @@ function sessionJwtAddress() {
     const token = localStorage.getItem("proofpay-jwt");
     if (!token) return "";
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
     return String(payload.address || "").toLowerCase();
   } catch {
     return "";
@@ -79,10 +80,26 @@ function markServerCopy(address, name, email) {
 
 const isSignedInAs = (address) => Boolean(address) && sessionJwtAddress() === address.toLowerCase();
 
+// Make sure there is a valid session for this wallet. A Circle (email) wallet
+// can get one silently -- it is a server check of its own login, no popup. A
+// MetaMask/Rabby wallet needs a signature popup, so that only happens when the
+// user asked for something (interactive), never in the background. Errors
+// (e.g. "Circle session expired, sign in with email again") are passed on.
+async function ensureSession(address, { interactive }) {
+  if (isSignedInAs(address)) return true;
+  const isCircle = localStorage.getItem("proofpay-wallet-type") === "circle";
+  if (!isCircle && !interactive) return false;
+  const { connectWalletWithOptions } = await import("../services/wallet");
+  await connectWalletWithOptions({ requireSignature: true });
+  return isSignedInAs(address);
+}
+
 // Explicit save (Profile page): sends exactly what is stored locally, empty
 // fields included, so clearing a field clears it on the server too.
 export async function saveProfileToServer(address) {
-  if (!isSignedInAs(address)) throw new Error("Please reconnect your wallet, then save again.");
+  if (!(await ensureSession(address, { interactive: true }))) {
+    throw new Error("Please reconnect your wallet, then save again.");
+  }
   const name = getProfileName(address);
   const email = getProfileEmail(address);
   await api.put("/profile", { name, email });
@@ -92,12 +109,34 @@ export async function saveProfileToServer(address) {
 // Pull the server profile into localStorage. Non-empty server values win;
 // a field that only exists locally (e.g. saved before this feature) is kept
 // and uploaded, so nothing an existing user typed is lost.
-export async function syncProfileFromServer(address, { force = false } = {}) {
-  if (!isSignedInAs(address)) return null;
+const syncInFlight = new Map();
+export function syncProfileFromServer(address, options = {}) {
+  // Getting a session fires "jwt-ready", which asks for a sync too -- share
+  // one run per wallet (never across wallets).
+  const key = String(address || "").toLowerCase();
+  if (!syncInFlight.has(key)) {
+    syncInFlight.set(key, runSync(address, options).finally(() => syncInFlight.delete(key)));
+  }
+  return syncInFlight.get(key);
+}
+
+async function runSync(address, { force = false } = {}) {
+  if (!address) return null;
   const flag = `proofpay-profile-synced:${address.toLowerCase()}`;
+  const tried = `proofpay-profile-session-tried:${address.toLowerCase()}`;
   try {
     if (!force && sessionStorage.getItem(flag)) return null;
   } catch { /* sessionStorage unavailable: just sync */ }
+
+  if (!isSignedInAs(address)) {
+    // Try to get a session once per browser session in the background (Circle
+    // only); do not retry on every page change if it keeps failing.
+    try {
+      if (sessionStorage.getItem(tried)) return null;
+      sessionStorage.setItem(tried, "1");
+    } catch { /* ignore */ }
+    if (!(await ensureSession(address, { interactive: false }))) return null;
+  }
 
   const { data } = await api.get("/profile", { _skipReauth: true });
   const server = data.profile || { name: "", email: "" };

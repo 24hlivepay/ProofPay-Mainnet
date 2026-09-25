@@ -408,7 +408,7 @@ export async function disconnectWallet() {
     }
   }
   for (const key of Object.keys(sessionStorage)) {
-    if (key.startsWith("proofpay-profile-synced:")) sessionStorage.removeItem(key);
+    if (key.startsWith("proofpay-profile-")) sessionStorage.removeItem(key);
   }
   sessionStorage.removeItem("proofpay-circle-auth");
   sessionStorage.removeItem("proofpay-circle-otp-session");
