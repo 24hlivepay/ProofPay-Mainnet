@@ -47,6 +47,7 @@ import {
   logAdminAction,
   getAuditLog,
 } from "./lib/adminAuth.js";
+import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -225,6 +226,7 @@ const dataFile = path.join(dataDirectory, "escrows.json");
 const walletConnectionsFile = path.join(dataDirectory, "wallet-connections.json");
 const adminStateFile = path.join(dataDirectory, "admin-2fa-state.json");
 const adminAuditLogFile = path.join(dataDirectory, "admin-audit-log.json");
+const profilesFile = path.join(dataDirectory, "profiles.json");
 const evidenceDirectory = path.join(dataDirectory, "evidence");
 const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
@@ -552,6 +554,33 @@ function appendAdminAuditLogLocal(entry) {
   entries.push(entry);
   fs.writeFileSync(adminAuditLogFile, JSON.stringify(entries, null, 2));
 }
+
+// ── Profile (display name + email) -- local-file helpers, used only without DATABASE_URL ──
+function readProfilesLocal() {
+  try {
+    if (!fs.existsSync(profilesFile)) return {};
+    return JSON.parse(fs.readFileSync(profilesFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+// A user's own profile only: the address always comes from the verified JWT,
+// never from the request, so one wallet cannot read or overwrite another's.
+app.get("/api/profile", requireAuth(), async (req, res) => {
+  await ensureDatabase();
+  const profile = await getProfile(databasePool, req.auth.address, readProfilesLocal());
+  return res.json({ success: true, profile });
+});
+
+app.put("/api/profile", requireAuth(), async (req, res) => {
+  const { profile, error } = sanitizeProfile(req.body);
+  if (error) return res.status(400).json({ success: false, message: error });
+  await ensureDatabase();
+  const nextLocal = await saveProfile(databasePool, req.auth.address, profile, readProfilesLocal());
+  if (nextLocal) fs.writeFileSync(profilesFile, JSON.stringify(nextLocal, null, 2));
+  return res.json({ success: true, profile });
+});
 
 // ── PR-2: nonce endpoint ─────────────────────────────────────────────────────
 // Unauthenticated. Rate-limited to 10 requests per IP per minute via a simple

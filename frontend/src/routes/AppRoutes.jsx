@@ -6,6 +6,7 @@ import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import Landing from "../pages/landing/Landing";
 import Home from "../pages/Home";
 import { getWalletSession } from "../services/wallet";
+import { syncProfileFromServer } from "../utils/profile";
 
 import CreateEscrow from "../pages/CreateEscrow";
 import GenerateLink from "../pages/GenerateLink";
@@ -70,6 +71,13 @@ export default function AppRoutes() {
     if (getWalletSession()?.address && SAFE_SESSION_ROUTES.has(location.pathname)) {
       localStorage.setItem(LAST_SAFE_ROUTE_KEY, location.pathname);
     }
+  }, [location.pathname]);
+
+  // Pull the account's saved profile into this browser (once per session per
+  // wallet), so a new browser/device does not ask for the name again.
+  useEffect(() => {
+    const address = getWalletSession()?.address;
+    if (address) syncProfileFromServer(address).catch(() => {});
   }, [location.pathname]);
 
   return (

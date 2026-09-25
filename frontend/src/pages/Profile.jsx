@@ -7,8 +7,10 @@ import { useWalletBadge } from "../hooks/useWalletBadge";
 import {
   getProfileEmail,
   getProfileName,
+  saveProfileToServer,
   setProfileEmail,
   setProfileName,
+  syncProfileFromServer,
 } from "../utils/profile";
 import { shortenAddress } from "../utils/address";
 
@@ -18,19 +20,44 @@ export default function Profile() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    setName(getProfileName(walletAddress));
-    setEmail(
-      getProfileEmail(walletAddress) || localStorage.getItem("proofpay-email") || ""
-    );
+    const fill = () => {
+      setName(getProfileName(walletAddress));
+      setEmail(
+        getProfileEmail(walletAddress) || localStorage.getItem("proofpay-email") || ""
+      );
+    };
+    fill();
+    // Show what is saved in the account (e.g. from another browser) as soon
+    // as it arrives, without waiting for a manual refresh.
+    let active = true;
+    syncProfileFromServer(walletAddress, { force: true })
+      .then((merged) => { if (active && merged) fill(); })
+      .catch(() => {});
+    return () => { active = false; };
   }, [walletAddress]);
 
-  function handleSave() {
+  async function handleSave() {
+    setError("");
+    setSaving(true);
     setProfileName(walletAddress, name);
     setProfileEmail(walletAddress, email);
-    setSaved(true);
-    setTimeout(() => navigate("/dashboard"), 900);
+    try {
+      await saveProfileToServer(walletAddress);
+      setSaved(true);
+      setTimeout(() => navigate("/dashboard"), 900);
+    } catch (saveError) {
+      setError(
+        saveError.response?.data?.message ||
+        saveError.message ||
+        "Saved on this device, but could not save to your account. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -83,14 +110,15 @@ export default function Profile() {
 
         <button
           onClick={handleSave}
-          disabled={!walletAddress || (!name.trim() && !email.trim())}
+          disabled={saving || !walletAddress || (!name.trim() && !email.trim())}
           className="mt-6 w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saved ? "Saved ✓" : "Save Profile"}
+          {saved ? "Saved ✓" : saving ? "Saving..." : "Save Profile"}
         </button>
+        {error && <p className="mt-3 rounded-xl bg-red-50 p-3 text-center text-sm text-red-700">{error}</p>}
         {saved && (
           <p className="mt-3 rounded-xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">
-            ✓ Profile saved — taking you back home...
+            ✓ Profile saved to your account — taking you back home...
           </p>
         )}
       </div>
