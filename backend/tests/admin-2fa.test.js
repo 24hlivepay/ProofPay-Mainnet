@@ -231,3 +231,57 @@ describe("Suite 6 — full-cycle simulation (password -> otp -> next login requi
     assert.equal(hasFreshPasswordVerification(state, t0 + 1000), true);
   });
 });
+
+describe("Suite 7 — dispute alert email", async () => {
+  const { buildDisputeAlertEmail, sendAdminEmail } = await import("../lib/adminAuth.js");
+  const escrow = {
+    escrowId: "PP-ABC123",
+    amount: "25",
+    assetSymbol: "EURC",
+    network: "mainnet",
+    dispute: {
+      openedBySide: "buyer",
+      reason: "Item not\nas described",
+      statement: "SECRET FULL STATEMENT <script>alert(1)</script>",
+    },
+  };
+
+  it("includes escrow, amount, opener and reason, plus the admin link", () => {
+    const { subject, text } = buildDisputeAlertEmail(escrow, "https://x.test/#/admin/disputes");
+    assert.match(subject, /PP-ABC123/);
+    assert.match(subject, /25 EURC/);
+    assert.match(text, /Opened by: buyer/);
+    assert.match(text, /Reason: Item not as described/);
+    assert.match(text, /https:\/\/x\.test\/#\/admin\/disputes/);
+  });
+
+  it("never includes the user's full statement", () => {
+    const { text } = buildDisputeAlertEmail(escrow, "https://x.test");
+    assert.doesNotMatch(text, /SECRET FULL STATEMENT/);
+    assert.doesNotMatch(text, /<script>/);
+  });
+
+  it("caps an oversized reason", () => {
+    const big = { ...escrow, dispute: { ...escrow.dispute, reason: "r".repeat(5000) } };
+    const { text } = buildDisputeAlertEmail(big, "https://x.test");
+    assert.ok(text.length < 600);
+  });
+
+  it("posts to Resend with the API key and recipient", async () => {
+    let seen;
+    await sendAdminEmail(
+      { subject: "s", text: "t" },
+      { apiKey: "k", toEmail: "a@b.c", fetchImpl: async (url, init) => { seen = { url, init }; return { ok: true }; } }
+    );
+    assert.equal(seen.url, "https://api.resend.com/emails");
+    assert.equal(seen.init.headers.Authorization, "Bearer k");
+    assert.deepEqual(JSON.parse(seen.init.body).to, ["a@b.c"]);
+  });
+
+  it("throws on a non-2xx Resend response", async () => {
+    await assert.rejects(
+      sendAdminEmail({ subject: "s", text: "t" }, { apiKey: "k", toEmail: "a@b.c", fetchImpl: async () => ({ ok: false, status: 401, text: async () => "no" }) }),
+      /Resend API error 401/
+    );
+  });
+});
