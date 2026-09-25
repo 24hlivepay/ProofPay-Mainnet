@@ -7,7 +7,7 @@ import {
   verifyCircleEmailOtp,
 } from "../circle/circleConfig";
 import api from "../services/api";
-import { saveCircleAuthSession } from "../services/wallet";
+import { connectWalletWithOptions, saveCircleAuthSession } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
 
 function findArcWallet(wallets = []) {
@@ -116,6 +116,15 @@ export default function OtpVerification() {
       }
 
       saveWalletSession(wallet, auth);
+      // Circle wallets only got a session token when some protected action
+      // happened to need one, so anything that depends on it (like syncing the
+      // saved profile) silently did nothing after an email login. Get it now;
+      // it is a silent server check, not a wallet popup.
+      try {
+        await connectWalletWithOptions({ requireSignature: true });
+      } catch {
+        // Login itself succeeded; a session is requested again when needed.
+      }
       setStatus("Wallet ready. Opening ProofPay...");
       const resumeRoute = sessionStorage.getItem("proofpay-post-login-route");
       sessionStorage.removeItem("proofpay-post-login-route");

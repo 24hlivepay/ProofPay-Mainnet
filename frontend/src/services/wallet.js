@@ -142,6 +142,7 @@ export async function connectWalletWithOptions({
         const jwt = connectRes.data?.token;
         if (jwt) {
           localStorage.setItem("proofpay-jwt", jwt);
+          window.dispatchEvent(new CustomEvent("proofpay:jwt-ready"));
         }
       } catch (err) {
         // The backend rejects an expired/invalid/unknown Circle userToken
@@ -286,6 +287,7 @@ export async function connectWalletWithOptions({
     const jwt = connectRes.data?.token;
     if (jwt) {
       localStorage.setItem("proofpay-jwt", jwt);
+      window.dispatchEvent(new CustomEvent("proofpay:jwt-ready"));
     }
   } catch (err) {
     // This used to be a bare `catch {}` -- any /wallet/connect failure
@@ -386,10 +388,24 @@ export async function disconnectWallet() {
   localStorage.removeItem("proofpay-circle-auth");
   localStorage.removeItem("proofpay-last-safe-route");
   localStorage.removeItem("proofpay-jwt"); // PR-3
-  // The account's profile stays on the server; drop this browser's cached
-  // copy (name/email) so it is not left behind on a shared computer.
+  // The account's profile lives on the server; drop this browser's cached
+  // name/email so it is not left on a shared computer -- but only for wallets
+  // whose current values are confirmed saved on the server. Anything not
+  // confirmed is kept, so disconnecting can never destroy the only copy.
+  const profileAddresses = new Set();
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("proofpay-profile-")) localStorage.removeItem(key);
+    for (const prefix of ["proofpay-profile-name:", "proofpay-profile-email:"]) {
+      if (key.startsWith(prefix)) profileAddresses.add(key.slice(prefix.length));
+    }
+  }
+  for (const address of profileAddresses) {
+    const name = localStorage.getItem(`proofpay-profile-name:${address}`) || "";
+    const email = localStorage.getItem(`proofpay-profile-email:${address}`) || "";
+    if (localStorage.getItem(`proofpay-profile-server-ok:${address}`) === `${name}\n${email}`) {
+      localStorage.removeItem(`proofpay-profile-name:${address}`);
+      localStorage.removeItem(`proofpay-profile-email:${address}`);
+      localStorage.removeItem(`proofpay-profile-server-ok:${address}`);
+    }
   }
   for (const key of Object.keys(sessionStorage)) {
     if (key.startsWith("proofpay-profile-synced:")) sessionStorage.removeItem(key);
