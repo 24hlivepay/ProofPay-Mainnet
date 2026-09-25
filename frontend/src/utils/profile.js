@@ -68,13 +68,25 @@ function sessionJwtAddress() {
   }
 }
 
+// Remember which exact name/email the server is known to hold, so disconnect
+// only clears this browser's copy when nothing would be lost.
+const SERVER_OK_PREFIX = "proofpay-profile-server-ok:";
+function markServerCopy(address, name, email) {
+  try {
+    localStorage.setItem(SERVER_OK_PREFIX + address.toLowerCase(), `${name || ""}\n${email || ""}`);
+  } catch { /* ignore */ }
+}
+
 const isSignedInAs = (address) => Boolean(address) && sessionJwtAddress() === address.toLowerCase();
 
 // Explicit save (Profile page): sends exactly what is stored locally, empty
 // fields included, so clearing a field clears it on the server too.
 export async function saveProfileToServer(address) {
   if (!isSignedInAs(address)) throw new Error("Please reconnect your wallet, then save again.");
-  await api.put("/profile", { name: getProfileName(address), email: getProfileEmail(address) });
+  const name = getProfileName(address);
+  const email = getProfileEmail(address);
+  await api.put("/profile", { name, email });
+  markServerCopy(address, name, email);
 }
 
 // Pull the server profile into localStorage. Non-empty server values win;
@@ -98,6 +110,7 @@ export async function syncProfileFromServer(address, { force = false } = {}) {
   if (merged.name !== server.name || merged.email !== server.email) {
     await api.put("/profile", merged, { _skipReauth: true });
   }
+  markServerCopy(address, merged.name, merged.email);
   try { sessionStorage.setItem(flag, "1"); } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent("proofpay:profile-synced"));
   return merged;
@@ -111,7 +124,10 @@ function queueServerPush(address) {
   if (!isSignedInAs(address)) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
-    api.put("/profile", { name: getProfileName(address), email: getProfileEmail(address) }, { _skipReauth: true })
+    const name = getProfileName(address);
+    const email = getProfileEmail(address);
+    api.put("/profile", { name, email }, { _skipReauth: true })
+      .then(() => markServerCopy(address, name, email))
       .catch(() => { /* local copy is kept; the next sync/save retries */ });
   }, 400);
 }

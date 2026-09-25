@@ -80,6 +80,15 @@ export default function AppRoutes() {
     if (address) syncProfileFromServer(address).catch(() => {});
   }, [location.pathname]);
 
+  useEffect(() => {
+    const onJwtReady = () => {
+      const address = getWalletSession()?.address;
+      if (address) syncProfileFromServer(address).catch(() => {});
+    };
+    window.addEventListener("proofpay:jwt-ready", onJwtReady);
+    return () => window.removeEventListener("proofpay:jwt-ready", onJwtReady);
+  }, []);
+
   return (
     <Routes>
 
