@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
-import api, { API_BASE_URL } from "../services/api";
+import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
+import { openEvidence } from "../utils/evidence";
 
 const MAX_SIZE = 2 * 1024 * 1024;
 
@@ -46,15 +47,20 @@ export default function DisputeResponse() {
   const alreadyResponded = dispute?.responses?.some((response) => response.side === mySide);
   const resolution = dispute?.resolution;
 
-  async function sendMessage(text) {
+  async function sendMessage(text, files) {
     try {
       setError("");
-      const response = await api.post(`/escrow/${order.escrowId}/dispute/message`, { wallet, text });
+      const response = await api.post(`/escrow/${order.escrowId}/dispute/message`, { wallet, text, files });
       setDispute(response.data.escrow.dispute);
     } catch (sendError) {
       setError(sendError.response?.data?.message || "Unable to send message.");
       throw sendError;
     }
+  }
+
+  async function openFile(file) {
+    try { setError(""); await openEvidence(order.escrowId, file); }
+    catch (openError) { setError(openError.message); }
   }
 
   async function submit(event) {
@@ -96,7 +102,7 @@ export default function DisputeResponse() {
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{dispute.statement}</p>
         {dispute.evidence?.length > 0 && <ul className="mt-3 text-sm">
           {dispute.evidence.map((file) => <li key={file.id}>
-            <a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={`${API_BASE_URL}/escrow/${order.escrowId}/dispute/evidence/${file.id}?wallet=${encodeURIComponent(wallet)}`}>{file.name}</a>
+            <button type="button" className="text-left text-blue-700 underline" onClick={() => openFile(file)}>{file.name}</button>
           </li>)}
         </ul>}
       </div>}
@@ -106,7 +112,7 @@ export default function DisputeResponse() {
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{response.statement}</p>
         {response.evidence?.length > 0 && <ul className="mt-3 text-sm">
           {response.evidence.map((file) => <li key={file.id}>
-            <a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={`${API_BASE_URL}/escrow/${order.escrowId}/dispute/evidence/${file.id}?wallet=${encodeURIComponent(wallet)}`}>{file.name}</a>
+            <button type="button" className="text-left text-blue-700 underline" onClick={() => openFile(file)}>{file.name}</button>
           </li>)}
         </ul>}
       </div>)}
@@ -115,6 +121,8 @@ export default function DisputeResponse() {
         <DisputeThread
           messages={dispute.messages}
           onSend={resolution || canRespond ? undefined : sendMessage}
+          allowFiles
+          escrowId={order.escrowId}
           collapseAfter={resolution ? 3 : undefined}
           placeholder="Reply to ProofPay admin or the other party."
         />
