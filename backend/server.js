@@ -33,6 +33,8 @@ import {
   verifyAdminPassword,
   generateOtp,
   sendOtpEmail,
+  sendAdminEmail,
+  buildDisputeAlertEmail,
   getAdminState,
   saveAdminState,
   recordPasswordAttempt,
@@ -1925,6 +1927,25 @@ app.post("/api/escrow/:id/release", requireAuth(), async (req, res) => {
 | Disputes and private evidence
 |--------------------------------------------------------------------------
 */
+// Best-effort alert to the admin inbox when a dispute opens. Awaited (bounded)
+// rather than fire-and-forget because a serverless function can be frozen once
+// the response is sent; never throws, so a mail outage cannot block a dispute.
+async function notifyAdminOfDispute(escrow) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const toEmail = process.env.ADMIN_EMAIL;
+  if (!apiKey || !toEmail) return;
+  try {
+    const base = process.env.FRONTEND_URL || "https://www.proofpay.online";
+    const { subject, text } = buildDisputeAlertEmail(escrow, `${base.replace(/\/$/, "")}/#/admin/disputes`);
+    await Promise.race([
+      sendAdminEmail({ subject, text }, { apiKey, toEmail }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 4000)),
+    ]);
+  } catch (err) {
+    console.error("[ProofPay] dispute alert email failed:", err?.message);
+  }
+}
+
 app.post("/api/escrow/:id/dispute", requireAuth(), async (req, res) => {
   try {
     const { reason, statement, files, transactionHash } = req.body || {};
@@ -1958,6 +1979,7 @@ app.post("/api/escrow/:id/dispute", requireAuth(), async (req, res) => {
     };
     await saveEscrows(allEscrows);
     escrows[escrow.escrowId] = escrow;
+    await notifyAdminOfDispute(escrow);
     const adminWalletDsp = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
     return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDsp) });
   } catch (error) {
@@ -2158,6 +2180,18 @@ app.post("/api/admin/verify-otp", requireAuth("admin"), async (req, res) => {
     "1h"
   );
   return res.json({ success: true, token });
+});
+
+// Count only (no case details), so the admin dashboard can flag open disputes
+// with wallet-proof auth alone; the cases themselves still need the full
+// password + OTP session via GET /api/admin/disputes.
+app.get("/api/admin/dispute-count", requireAuth("admin"), async (req, res) => {
+  const network = getRequestNetwork(req);
+  const allEscrows = await loadEscrows();
+  const count = allEscrows.filter(
+    (escrow) => escrow.status === "Disputed" && escrow.dispute && escrowNetwork(escrow) === network
+  ).length;
+  return res.json({ success: true, count });
 });
 
 // Shared with GET /api/escrows below -- the same grouping buyers/sellers see

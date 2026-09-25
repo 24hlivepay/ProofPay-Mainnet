@@ -60,24 +60,58 @@ export function hashOtp(otp) {
  * send" from "OTP stored" and avoid telling the admin a code is on its way
  * when it never left the server.
  */
-export async function sendOtpEmail(otp, { apiKey, toEmail, fromEmail = "ProofPay Admin <noreply@proofpay.online>", fetchImpl = fetch }) {
+export async function sendOtpEmail(otp, { apiKey, toEmail, fromEmail, fetchImpl = fetch }) {
+  return sendAdminEmail(
+    {
+      subject: `ProofPay admin login code: ${otp}`,
+      text: `Your ProofPay admin verification code is ${otp}. It expires in 5 minutes. If you did not request this, someone may have your admin password -- rotate it immediately.`,
+    },
+    { apiKey, toEmail, fromEmail, fetchImpl }
+  );
+}
+
+/** Plain-text email to the admin inbox via Resend. Throws on non-2xx. */
+export async function sendAdminEmail(
+  { subject, text },
+  { apiKey, toEmail, fromEmail = "ProofPay Admin <noreply@proofpay.online>", fetchImpl = fetch }
+) {
   const res = await fetchImpl("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [toEmail],
-      subject: `ProofPay admin login code: ${otp}`,
-      text: `Your ProofPay admin verification code is ${otp}. It expires in 5 minutes. If you did not request this, someone may have your admin password -- rotate it immediately.`,
-    }),
+    body: JSON.stringify({ from: fromEmail, to: [toEmail], subject, text }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Resend API error ${res.status}: ${body.slice(0, 200)}`);
   }
+}
+
+const oneLine = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+
+/**
+ * Subject/body for the "a dispute was opened" alert. Deliberately excludes
+ * the user's full statement and evidence (those stay behind admin sign-in);
+ * plain text only, so user-supplied text cannot inject markup.
+ */
+export function buildDisputeAlertEmail(escrow, adminUrl) {
+  const d = escrow.dispute || {};
+  return {
+    subject: `ProofPay dispute opened: ${oneLine(escrow.escrowId, 30)} (${oneLine(escrow.amount, 20)} ${oneLine(escrow.assetSymbol || "USDC", 10)})`,
+    text: [
+      "A dispute was just opened on ProofPay.",
+      "",
+      `Escrow: ${oneLine(escrow.escrowId, 30)}`,
+      `Amount: ${oneLine(escrow.amount, 20)} ${oneLine(escrow.assetSymbol || "USDC", 10)}`,
+      `Network: ${oneLine(escrow.network || "", 10)}`,
+      `Opened by: ${oneLine(d.openedBySide, 10)}`,
+      `Reason: ${oneLine(d.reason, 120)}`,
+      "",
+      `Review it (admin sign-in required): ${adminUrl}`,
+    ].join("\n"),
+  };
 }
 
 // ---------------------------------------------------------------------------
