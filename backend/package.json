@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test tests/pr1-hardening.test.js tests/pr2-auth.test.js tests/pr3-auth-enforcement.test.js tests/admin-2fa.test.js"
+    "test": "node --test tests/pr1-hardening.test.js tests/pr2-auth.test.js tests/pr3-auth-enforcement.test.js tests/admin-2fa.test.js tests/profile.test.js"
   },
   "dependencies": {
     "@circle-fin/user-controlled-wallets": "^10.8.0",

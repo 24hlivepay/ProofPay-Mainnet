@@ -386,6 +386,14 @@ export async function disconnectWallet() {
   localStorage.removeItem("proofpay-circle-auth");
   localStorage.removeItem("proofpay-last-safe-route");
   localStorage.removeItem("proofpay-jwt"); // PR-3
+  // The account's profile stays on the server; drop this browser's cached
+  // copy (name/email) so it is not left behind on a shared computer.
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("proofpay-profile-")) localStorage.removeItem(key);
+  }
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith("proofpay-profile-synced:")) sessionStorage.removeItem(key);
+  }
   sessionStorage.removeItem("proofpay-circle-auth");
   sessionStorage.removeItem("proofpay-circle-otp-session");
 }

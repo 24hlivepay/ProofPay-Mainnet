@@ -40,6 +40,10 @@ api.interceptors.response.use(
     const isAuthEndpoint = (config?.url || "").includes("/wallet/connect");
     const isAdminRequest = (config?.url || "").includes("/admin/");
 
+    // Background calls (e.g. profile sync at startup) must never open a wallet
+    // signature popup or show the "session expired" banner on their own.
+    if (config?._skipReauth) return Promise.reject(error);
+
     if (error.response?.status === 401 && isAdminRequest) {
       // A plain wallet reconnect can't restore the password+OTP admin
       // session -- clear the stale token so the admin page redirects to a

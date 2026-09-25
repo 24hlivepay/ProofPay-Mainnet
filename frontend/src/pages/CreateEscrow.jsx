@@ -45,6 +45,14 @@ export default function CreateEscrow() {
   useEffect(() => {
     setBuyerName(getProfileName(walletAddress));
     setBuyerEmail(getProfileEmail(walletAddress));
+    // If the account profile arrives after this page mounted (new browser),
+    // fill only fields still empty -- never overwrite what is being typed.
+    const fillEmpty = () => {
+      setBuyerName((current) => current || getProfileName(walletAddress));
+      setBuyerEmail((current) => current || getProfileEmail(walletAddress));
+    };
+    window.addEventListener("proofpay:profile-synced", fillEmpty);
+    return () => window.removeEventListener("proofpay:profile-synced", fillEmpty);
   }, [walletAddress]);
   const [productName, setProductName] = useState("");
   const [productId, setProductId] = useState("");
