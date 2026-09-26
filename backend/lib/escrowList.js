@@ -1,5 +1,20 @@
 import { sanitizeEscrow } from "./auth.js";
 
+// When a deal last changed, so the newest activity (a released payment, a
+// dispute settled by the admin, a cancellation) comes first in every list.
+export function lastActivityAt(escrow) {
+  const times = [
+    escrow.dispute?.resolution?.resolvedAt,
+    escrow.dispute?.openedAt,
+    escrow.releasedAt,
+    escrow.cancelledAt,
+    escrow.deliveredAt,
+    escrow.depositedAt,
+    escrow.createdAt,
+  ].map(Number).filter(Number.isFinite);
+  return times.length ? Math.max(...times) : 0;
+}
+
 /*
  * The signed-in caller's own escrows for one dashboard list.
  *
@@ -34,7 +49,8 @@ export function listEscrowsForCaller({
     .map((escrow) => {
       const { documents, ...rest } = sanitizeEscrow(escrow, callerAddress, adminAddress); // eslint-disable-line no-unused-vars
       return rest;
-    });
+    })
+    .sort((a, b) => lastActivityAt(b) - lastActivityAt(a));
 }
 
 const text = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
