@@ -366,12 +366,15 @@ export default function CreateEscrow() {
                     type="file"
                     accept={DOCUMENT_ACCEPT}
                     onChange={(event) => setDocumentFiles([...event.target.files])}
-                    className="mt-1 block w-full text-sm font-normal"
+                    className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
                   />
                 </label>
                 <p className="mt-1 text-xs text-slate-500">
                   A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, JPG, PNG, WEBP or PDF, 2 MB each.{" "}
                   {DOCUMENT_PRIVACY_NOTE}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">
+                  The files you choose are uploaded automatically when you press Create Escrow.
                 </p>
                 {documentFiles.length > 0 && (
                   <div className="mt-2 text-sm">
