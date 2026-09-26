@@ -118,10 +118,10 @@ export default function DisputeResponse() {
         </ul>}
       </div>)}
 
-      {dispute && (dispute.messages?.length > 0 || (!resolution && !canRespond)) && (
+      {dispute && (dispute.messages?.length > 0 || !resolution) && (
         <DisputeThread
           messages={dispute.messages}
-          onSend={resolution || canRespond ? undefined : sendMessage}
+          onSend={resolution ? undefined : sendMessage}
           allowFiles
           escrowId={order.escrowId}
           parties={buildDisputeParties(order)}
