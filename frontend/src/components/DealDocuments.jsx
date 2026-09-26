@@ -7,6 +7,7 @@ import {
   formatFileSize,
   mergeSelectedFiles,
   openDealDocument,
+  removeDealDocument,
   uploadDealDocuments,
 } from "../utils/dealDocuments";
 
@@ -126,6 +127,21 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
     }
   }
 
+  async function handleRemove(file) {
+    const ok = window.confirm(
+      `Remove ${file.name}?\n\nThe file is deleted. The other party will still see that it was removed, and when. You can then add a different file.`
+    );
+    if (!ok) return;
+    try {
+      setMessage(null);
+      await removeDealDocument(escrowId, file);
+      await load();
+      setMessage({ type: "success", text: `${file.name} was removed. You can add another file.` });
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    }
+  }
+
   async function handleUpload() {
     const problem = checkDocumentFiles(files, slotsLeft);
     if (problem) {
@@ -145,7 +161,7 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
     );
   }
 
-  function renderDocumentList(title, documents) {
+  function renderDocumentList(title, documents, { removable = false } = {}) {
     return (
       <div className="mt-3">
         <p className="text-sm font-semibold text-slate-700">{title}</p>
@@ -153,14 +169,30 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
           <p className="mt-1 text-sm text-slate-500">None yet.</p>
         ) : (
           <ul className="mt-1 space-y-1 text-sm">
-            {documents.map((doc) => (
-              <li key={doc.id}>
-                <button type="button" onClick={() => handleOpen(doc)} className="text-left text-blue-700 underline">
-                  {doc.name}
-                </button>
-                <span className="ml-2 text-xs text-slate-500">{formatFileSize(doc.size)}</span>
-              </li>
-            ))}
+            {documents.map((doc) =>
+              doc.removedAt ? (
+                <li key={doc.id} className="text-slate-500">
+                  <span className="line-through">{doc.name}</span>
+                  <span className="ml-2 text-xs">
+                    removed by {doc.removedBy === mySide ? "you" : doc.removedBy} on {new Date(doc.removedAt).toLocaleString()}
+                  </span>
+                </li>
+              ) : (
+                <li key={doc.id} className="flex items-start justify-between gap-3">
+                  <span className="break-all">
+                    <button type="button" onClick={() => handleOpen(doc)} className="text-left text-blue-700 underline">
+                      {doc.name}
+                    </button>
+                    <span className="ml-2 text-xs text-slate-500">{formatFileSize(doc.size)}</span>
+                  </span>
+                  {removable && (
+                    <button type="button" onClick={() => handleRemove(doc)} className="shrink-0 text-xs font-semibold text-red-600 underline">
+                      Remove
+                    </button>
+                  )}
+                </li>
+              )
+            )}
           </ul>
         )}
       </div>
@@ -172,7 +204,7 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
       <h3 className="font-bold text-slate-900">Agreement &amp; proof <span className="font-normal text-slate-500">(optional)</span></h3>
       <p className="mt-1 text-xs text-slate-500">{DOCUMENT_PRIVACY_LINE}</p>
 
-      {renderDocumentList("Your documents", mine)}
+      {renderDocumentList("Your documents", mine, { removable: canUpload })}
       {renderDocumentList(mySide === "buyer" ? "Seller's documents" : "Buyer's documents", theirs)}
 
       {canUpload && slotsLeft > 0 && (

@@ -4,11 +4,14 @@ import assert from "node:assert/strict";
 import {
   DOCUMENT_UPLOAD_STATUSES,
   MAX_DEAL_DOCUMENTS_PER_SIDE,
+  canRemoveDocument,
   canUploadDocuments,
   canViewDocuments,
   dealPartySide,
   documentSlotsLeft,
+  isRemoved,
   publicDocuments,
+  removedDocument,
 } from "../lib/documents.js";
 import { sanitizeEscrow } from "../lib/auth.js";
 
@@ -165,5 +168,67 @@ describe("sanitizeEscrow and documents", () => {
     sanitizeEscrow(stored, OUTSIDER, ADMIN);
     assert.equal(stored.documents.length, 1);
     assert.equal(stored.documents[0].blobUrl.startsWith("https://"), true);
+  });
+});
+
+describe("removing a document", () => {
+  const open = () => ESCROW({ status: "Funds Locked", sellerWallet: SELLER });
+
+  it("lets a party remove their own file while the deal is open", () => {
+    assert.equal(canRemoveDocument(open(), BUYER, STORED({ side: "buyer" })), true);
+    assert.equal(canRemoveDocument(open(), SELLER, STORED({ side: "seller" })), true);
+  });
+
+  it("does not let a party remove the other party's file", () => {
+    assert.equal(canRemoveDocument(open(), SELLER, STORED({ side: "buyer" })), false);
+    assert.equal(canRemoveDocument(open(), BUYER, STORED({ side: "seller" })), false);
+  });
+
+  it("does not let the admin or an outsider remove anything", () => {
+    assert.equal(canRemoveDocument(open(), ADMIN, STORED({ side: "buyer" })), false);
+    assert.equal(canRemoveDocument(open(), OUTSIDER, STORED({ side: "buyer" })), false);
+  });
+
+  it("does not allow removing once the deal is disputed or finished", () => {
+    for (const status of ["Disputed", "Released", "Refunded", "Cancelled", "Rejected"]) {
+      assert.equal(canRemoveDocument(ESCROW({ status, sellerWallet: SELLER }), BUYER, STORED({ side: "buyer" })), false, status);
+    }
+  });
+
+  it("does not remove the same file twice", () => {
+    const gone = removedDocument(STORED({ side: "buyer" }), "buyer", 1700000001000);
+    assert.equal(canRemoveDocument(open(), BUYER, gone), false);
+    assert.equal(isRemoved(gone), true);
+    assert.equal(isRemoved(STORED()), false);
+  });
+
+  it("clears the stored copy but keeps the name, who removed it and when", () => {
+    const gone = removedDocument(STORED({ side: "buyer" }), "buyer", 1700000001000);
+    assert.equal(gone.path, "");
+    assert.equal(gone.blobUrl, "");
+    assert.equal(gone.removedBy, "buyer");
+    assert.equal(gone.removedAt, 1700000001000);
+    assert.equal(gone.name, "agreement.pdf");
+    assert.equal(gone.hash, "abc123");
+  });
+
+  it("shows a removed file to the API as a marker only", () => {
+    const gone = removedDocument(STORED({ side: "buyer" }), "buyer", 1700000001000);
+    const [doc] = publicDocuments(ESCROW({ documents: [gone] }));
+    assert.deepEqual(Object.keys(doc).sort(), ["id", "name", "removedAt", "removedBy", "side"]);
+  });
+
+  it("frees a slot when a file is removed", () => {
+    const docs = [STORED({ id: "a" }), STORED({ id: "b" }), removedDocument(STORED({ id: "c" }), "buyer")];
+    assert.equal(documentSlotsLeft(ESCROW({ documents: docs }), "buyer"), MAX_DEAL_DOCUMENTS_PER_SIDE - 2);
+  });
+
+  it("keeps showing the marker to the other party through sanitizeEscrow, never to the admin", () => {
+    const gone = removedDocument(STORED({ side: "buyer" }), "buyer", 1700000001000);
+    const escrow = ESCROW({ documents: [gone, STORED({ id: "b", side: "buyer" })] });
+    const forSeller = sanitizeEscrow(escrow, SELLER, ADMIN).documents;
+    assert.equal(forSeller.length, 2);
+    assert.equal(forSeller[0].removedBy, "buyer");
+    assert.equal("documents" in sanitizeEscrow(escrow, ADMIN, ADMIN), false);
   });
 });

@@ -48,14 +48,17 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
-import { get as getBlob, put as putBlob } from "@vercel/blob";
+import { del as delBlob, get as getBlob, put as putBlob } from "@vercel/blob";
 import {
+  canRemoveDocument,
   canUploadDocuments,
   canViewDocuments,
   dealPartySide,
   documentSlotsLeft,
+  isRemoved,
   MAX_DEAL_DOCUMENTS_PER_SIDE,
   publicDocuments,
+  removedDocument,
 } from "./lib/documents.js";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -2203,6 +2206,42 @@ app.get("/api/escrow/:id/documents", requireAuth(), async (req, res) => {
   });
 });
 
+// A party removes one of THEIR OWN documents (to replace it) while the deal is open. The
+// stored copy is deleted; the record keeps a marker the other party still sees.
+app.delete("/api/escrow/:id/documents/:fileId", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address;
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
+
+  const side = dealPartySide(escrow, wallet);
+  if (!side) return res.status(403).json({ success: false, message: "Only the buyer or the seller of this deal can remove documents." });
+
+  const document = (Array.isArray(escrow.documents) ? escrow.documents : []).find((entry) => entry.id === req.params.fileId);
+  if (!document) return res.status(404).json({ success: false, message: "Document not found." });
+  if (isRemoved(document)) return res.status(400).json({ success: false, message: "This document was already removed." });
+  if (document.side !== side) return res.status(403).json({ success: false, message: "You can only remove your own documents." });
+  if (!canRemoveDocument(escrow, wallet, document)) {
+    return res.status(400).json({ success: false, message: "Documents can only be removed while the deal is open." });
+  }
+
+  try {
+    if (document.blobUrl) {
+      await delBlob(document.blobUrl);
+    } else if (document.path) {
+      fs.rmSync(path.resolve(evidenceDirectory, escrow.escrowId, document.path), { force: true });
+    }
+  } catch (error) {
+    console.error("[ProofPay] document delete failed:", error?.message);
+    return res.status(500).json({ success: false, message: "Could not remove the file. Please try again." });
+  }
+
+  escrow.documents = escrow.documents.map((entry) => (entry.id === document.id ? removedDocument(entry, side) : entry));
+  await saveEscrows(allEscrows);
+  const adminWalletDel = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDel) });
+});
+
 app.get("/api/escrow/:id/documents/:fileId", requireAuth(), async (req, res) => {
   const wallet = req.auth.address;
   const allEscrows = await loadEscrows();
@@ -2210,6 +2249,7 @@ app.get("/api/escrow/:id/documents/:fileId", requireAuth(), async (req, res) => 
   if (!escrow || !canViewDocuments(escrow, wallet)) return res.sendStatus(403);
   const file = (Array.isArray(escrow.documents) ? escrow.documents : []).find((entry) => entry.id === req.params.fileId);
   if (!file) return res.sendStatus(404);
+  if (isRemoved(file)) return res.sendStatus(410);
   if (file.blobUrl) {
     const blob = await getBlob(file.blobUrl, { access: "private" });
     if (!blob?.stream) return res.sendStatus(404);
