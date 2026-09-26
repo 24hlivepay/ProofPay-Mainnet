@@ -80,6 +80,24 @@ no longer used by the app. No cirBTC escrow is offered on testnet until a V2 one
 
 The contract uses `SafeERC20`, `ReentrancyGuard`, participant-only state transitions, and an owner-controlled dispute resolution path.
 
+### Design rule: nobody refunds themselves
+
+Once the buyer has deposited, neither the buyer nor the seller can take the
+money out alone. It leaves the contract in only two ways:
+
+1. The seller confirms delivery and the buyer releases the funds to the seller.
+2. Either side opens a dispute. The funds freeze, buyer and seller can do
+   nothing more, and only the admin (owner) decides: full refund to the buyer,
+   full payment to the seller, or a split.
+
+There must be no buyer-side `refund()` or any other way to pull funds back
+without a dispute. The deployed v1 contracts (testnet and mainnet) still contain
+a buyer-only `refund()` from the original prototype. The app never offers
+it (and the app code that could call it is removed separately), but it cannot
+be removed from those contracts. `foundry/src/ProofPayEscrowV2.sol` is the replacement without it
+(not deployed yet); its tests in `foundry/test/ProofPayEscrowV2.t.sol` enforce
+this rule and must keep passing.
+
 ## Repository structure
 
 ```text
