@@ -22,6 +22,7 @@ import {
   MAX_DEAL_DOCUMENTS_PER_SIDE,
   checkDocumentFiles,
   formatFileSize,
+  mergeSelectedFiles,
   uploadDealDocuments,
 } from "../utils/dealDocuments";
 
@@ -70,7 +71,6 @@ export default function CreateEscrow() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [description, setDescription] = useState("");
   const [documentFiles, setDocumentFiles] = useState([]);
-  const [documentInputKey, setDocumentInputKey] = useState(0);
   const [expectedSeller, setExpectedSeller] = useState("");
   const [sellerSeen, setSellerSeen] = useState(null); // null | true | false
   const [submitting, setSubmitting] = useState(false);
@@ -361,11 +361,14 @@ export default function CreateEscrow() {
                 <label className="block text-sm font-semibold text-slate-700">
                   Agreement or proof <span className="font-normal text-slate-500">(optional)</span>
                   <input
-                    key={documentInputKey}
                     multiple
                     type="file"
                     accept={DOCUMENT_ACCEPT}
-                    onChange={(event) => setDocumentFiles([...event.target.files])}
+                    onChange={(event) => {
+                      const chosen = [...event.target.files];
+                      event.target.value = "";
+                      setDocumentFiles((current) => mergeSelectedFiles(current, chosen));
+                    }}
                     className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
                   />
                 </label>
@@ -378,23 +381,30 @@ export default function CreateEscrow() {
                 </p>
                 {documentFiles.length > 0 && (
                   <div className="mt-2 text-sm">
-                    <ul className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-600">
+                      {documentFiles.length} of {MAX_DEAL_DOCUMENTS_PER_SIDE} files selected
+                    </p>
+                    <ul className="mt-1 space-y-1">
                       {documentFiles.map((file) => (
-                        <li key={file.name}>
-                          {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
+                        <li key={`${file.name}:${file.size}`} className="flex items-center justify-between gap-3">
+                          <span className="break-all">
+                            {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setDocumentFiles((current) => current.filter((item) => item !== file))}
+                            className="shrink-0 text-xs font-semibold text-red-600 underline"
+                          >
+                            Remove
+                          </button>
                         </li>
                       ))}
                     </ul>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDocumentFiles([]);
-                        setDocumentInputKey((key) => key + 1);
-                      }}
-                      className="mt-1 text-xs font-semibold text-blue-700 underline"
-                    >
-                      Clear files
-                    </button>
+                    {documentFiles.length > MAX_DEAL_DOCUMENTS_PER_SIDE && (
+                      <p className="mt-1 text-xs text-red-700">
+                        You can attach at most {MAX_DEAL_DOCUMENTS_PER_SIDE} files. Remove some to continue.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
