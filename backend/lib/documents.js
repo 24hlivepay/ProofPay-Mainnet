@@ -9,6 +9,11 @@
 // The ProofPay admin has NO access, before or after a dispute. These files can
 // hold private material. If a dispute is opened, each side can attach whatever
 // it wants the admin to see again, as evidence or in the dispute message box.
+//
+// Removing: a party can remove their OWN files while the deal is open (to replace them
+// with another). The stored copy is deleted, but the record keeps a marker (the name,
+// who removed it and when) that the other party still sees, so a file the other side
+// relied on cannot be swapped out silently.
 
 export const MAX_DEAL_DOCUMENTS_PER_SIDE = 5;
 
@@ -41,20 +46,37 @@ export function canUploadDocuments(escrow) {
   return DOCUMENT_UPLOAD_STATUSES.has(escrow?.status);
 }
 
+export const isRemoved = (doc) => Boolean(doc?.removedAt);
+
+// Only your own file, not already removed, and only while the deal is open.
+export function canRemoveDocument(escrow, wallet, doc) {
+  return Boolean(doc) && !isRemoved(doc) && dealPartySide(escrow, wallet) === doc.side && canUploadDocuments(escrow);
+}
+
+// The record of a removed file: the stored copy is gone (path and URL cleared), the
+// name, who removed it and when stay. The hash is kept internally as proof of what it was.
+export function removedDocument(doc, side, now = Date.now()) {
+  return { ...doc, path: "", blobUrl: "", removedAt: now, removedBy: side };
+}
+
 export function documentSlotsLeft(escrow, side) {
-  const used = (Array.isArray(escrow?.documents) ? escrow.documents : []).filter((doc) => doc.side === side).length;
+  const used = (Array.isArray(escrow?.documents) ? escrow.documents : []).filter((doc) => doc.side === side && !isRemoved(doc)).length;
   return Math.max(0, MAX_DEAL_DOCUMENTS_PER_SIDE - used);
 }
 
 // What the API may show about a document. Never the storage path, the storage
-// URL or the hash.
+// URL or the hash. A removed file shows only its name, side, and who removed it and when.
 export function publicDocuments(escrow) {
-  return (Array.isArray(escrow?.documents) ? escrow.documents : []).map((doc) => ({
-    id: doc.id,
-    side: doc.side,
-    name: doc.name,
-    type: doc.type,
-    size: doc.size,
-    uploadedAt: doc.uploadedAt,
-  }));
+  return (Array.isArray(escrow?.documents) ? escrow.documents : []).map((doc) =>
+    isRemoved(doc)
+      ? { id: doc.id, side: doc.side, name: doc.name, removedAt: doc.removedAt, removedBy: doc.removedBy }
+      : {
+          id: doc.id,
+          side: doc.side,
+          name: doc.name,
+          type: doc.type,
+          size: doc.size,
+          uploadedAt: doc.uploadedAt,
+        }
+  );
 }
