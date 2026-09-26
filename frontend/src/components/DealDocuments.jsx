@@ -116,23 +116,25 @@ export default function DealDocuments({ escrowId }) {
               type="file"
               accept={DOCUMENT_ACCEPT}
               onChange={(event) => setFiles([...event.target.files])}
-              className="mt-1 block w-full text-sm font-normal"
+              className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
             />
           </label>
           <p className="mt-1 text-xs text-slate-500">
             A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files in total from you, JPG, PNG, WEBP or PDF, 2 MB each.
             You can still add {slotsLeft}.
           </p>
-          {files.length > 0 && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleUpload}
-              className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {busy ? "Uploading..." : `Upload ${files.length} file${files.length === 1 ? "" : "s"}`}
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={busy || files.length === 0}
+            onClick={handleUpload}
+            className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy
+              ? "Uploading..."
+              : files.length > 0
+                ? `Upload ${files.length} file${files.length === 1 ? "" : "s"}`
+                : "Upload"}
+          </button>
         </div>
       )}
 
