@@ -7,6 +7,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import ProofPayLogo from "../components/ProofPayLogo";
 import CopyButton from "../components/CopyButton";
 import { useEscrow } from "../context/EscrowContext";
+import DealDocuments from "../components/DealDocuments";
 import api from "../services/api";
 import { connectWalletWithOptions, getWalletSession } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
@@ -289,6 +290,8 @@ export default function SellerAccept() {
                 <SummaryRow label="Escrow ID" value={escrow.escrowId} />
               </div>
             </div>
+
+            <div className="mt-6"><DealDocuments escrowId={escrow.escrowId} /></div>
 
             {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
 

@@ -16,6 +16,14 @@ import {
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
 import { getProfileEmail, getProfileName } from "../utils/profile";
 import { shortenAddress } from "../utils/address";
+import { DOCUMENT_PRIVACY_NOTE } from "../components/DealDocuments";
+import {
+  DOCUMENT_ACCEPT,
+  MAX_DEAL_DOCUMENTS_PER_SIDE,
+  checkDocumentFiles,
+  formatFileSize,
+  uploadDealDocuments,
+} from "../utils/dealDocuments";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -61,6 +69,8 @@ export default function CreateEscrow() {
   const [assetBalance, setAssetBalance] = useState("");
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [description, setDescription] = useState("");
+  const [documentFiles, setDocumentFiles] = useState([]);
+  const [documentInputKey, setDocumentInputKey] = useState(0);
   const [expectedSeller, setExpectedSeller] = useState("");
   const [sellerSeen, setSellerSeen] = useState(null); // null | true | false
   const [submitting, setSubmitting] = useState(false);
@@ -184,6 +194,14 @@ export default function CreateEscrow() {
       return;
     }
 
+    if (documentFiles.length > 0) {
+      const documentProblem = checkDocumentFiles(documentFiles);
+      if (documentProblem) {
+        setError(documentProblem);
+        return;
+      }
+    }
+
     const confirmed = window.confirm(
       `This deal will be locked to seller wallet:\n\n${expectedSeller.trim().toLowerCase()}\n\nOnly this wallet will be able to accept it. Make sure this is your seller's correct address before continuing.`
     );
@@ -209,6 +227,18 @@ export default function CreateEscrow() {
       });
 
       setEscrowData(response.data.escrow);
+
+      if (documentFiles.length > 0) {
+        const { failed } = await uploadDealDocuments(response.data.escrow.escrowId, documentFiles);
+        if (failed.length > 0) {
+          window.alert(
+            `Your deal was created, but ${failed.length} document${failed.length === 1 ? "" : "s"} could not be uploaded:\n\n${failed
+              .map((item) => `${item.name}: ${item.message}`)
+              .join("\n")}\n\nYou can add them again on the next page.`
+          );
+        }
+      }
+
       navigate("/waiting");
     } catch (requestError) {
       setError(requestError.message || "Unable to create escrow.");
@@ -326,6 +356,45 @@ export default function CreateEscrow() {
                 </div>
               </div>
               <textarea rows={3} placeholder="Deal Description (Optional)" value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500" />
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Agreement or proof <span className="font-normal text-slate-500">(optional)</span>
+                  <input
+                    key={documentInputKey}
+                    multiple
+                    type="file"
+                    accept={DOCUMENT_ACCEPT}
+                    onChange={(event) => setDocumentFiles([...event.target.files])}
+                    className="mt-1 block w-full text-sm font-normal"
+                  />
+                </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, JPG, PNG, WEBP or PDF, 2 MB each.{" "}
+                  {DOCUMENT_PRIVACY_NOTE}
+                </p>
+                {documentFiles.length > 0 && (
+                  <div className="mt-2 text-sm">
+                    <ul className="space-y-1">
+                      {documentFiles.map((file) => (
+                        <li key={file.name}>
+                          {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocumentFiles([]);
+                        setDocumentInputKey((key) => key + 1);
+                      }}
+                      className="mt-1 text-xs font-semibold text-blue-700 underline"
+                    >
+                      Clear files
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* PR-3: required seller wallet lock */}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">

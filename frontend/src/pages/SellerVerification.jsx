@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import { useEscrow } from "../context/EscrowContext";
+import DealDocuments from "../components/DealDocuments";
 import api from "../services/api";
 import { confirmDeliveryOnChain } from "../services/proofpayContract";
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
@@ -138,6 +139,8 @@ export default function SellerVerification() {
             </div>
           </div>
         )}
+
+        {escrowData.escrowId && <div className="mb-7"><DealDocuments escrowId={escrowData.escrowId} /></div>}
 
         {content}
       </main>
