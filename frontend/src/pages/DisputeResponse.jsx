@@ -7,6 +7,7 @@ import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
 import MentionTextarea from "../components/MentionTextarea";
+import MentionText from "../components/MentionText";
 import DealDocuments from "../components/DealDocuments";
 import { openEvidence } from "../utils/evidence";
 import { buildDisputeParties } from "../utils/disputeMentions";
@@ -104,7 +105,7 @@ export default function DisputeResponse() {
       {dispute && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h2 className="font-bold text-slate-900">{dispute.openedBySide === "buyer" ? "Buyer" : "Seller"} claim</h2>
         <p className="mt-1 text-sm font-semibold text-slate-700">{dispute.reason}</p>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{dispute.statement}</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700"><MentionText text={dispute.statement} parties={buildDisputeParties(order)} /></p>
         {dispute.evidence?.length > 0 && <ul className="mt-3 text-sm">
           {dispute.evidence.map((file) => <li key={file.id}>
             <button type="button" className="text-left text-blue-700 underline" onClick={() => openFile(file)}>{file.name}</button>
@@ -114,7 +115,7 @@ export default function DisputeResponse() {
 
       {dispute?.responses?.map((response, index) => <div key={index} className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h2 className="font-bold text-slate-900">{response.side === "buyer" ? "Buyer" : "Seller"} response</h2>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{response.statement}</p>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700"><MentionText text={response.statement} parties={buildDisputeParties(order)} /></p>
         {response.evidence?.length > 0 && <ul className="mt-3 text-sm">
           {response.evidence.map((file) => <li key={file.id}>
             <button type="button" className="text-left text-blue-700 underline" onClick={() => openFile(file)}>{file.name}</button>
@@ -137,7 +138,7 @@ export default function DisputeResponse() {
 
       {resolution && <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
         <h2 className="font-bold text-green-900">ProofPay admin decision</h2>
-        {resolution.note && <p className="mt-2 whitespace-pre-wrap text-sm text-green-800">{resolution.note}</p>}
+        {resolution.note && <p className="mt-2 whitespace-pre-wrap text-sm text-green-800"><MentionText text={resolution.note} parties={buildDisputeParties(order)} /></p>}
         <p className="mt-3 text-sm font-semibold text-green-900">
           {resolution.buyerAmount} {order.assetSymbol} to buyer · {resolution.sellerAmount} {order.assetSymbol} to seller
         </p>

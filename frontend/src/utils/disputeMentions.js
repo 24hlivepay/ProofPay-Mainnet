@@ -60,5 +60,9 @@ export function splitMentions(text, parties) {
   return String(text)
     .split(pattern)
     .filter((piece) => piece !== "")
-    .map((piece) => ({ text: piece, mention: tokens.includes(piece) }));
+    .map((piece) => ({
+      text: piece,
+      mention: tokens.includes(piece),
+      key: parties.find((party) => party.insert === piece)?.key,
+    }));
 }

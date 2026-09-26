@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { openEvidence, readEvidenceFiles } from "../utils/evidence";
-import { applyMention, filterParties, findMentionQuery, insertMentionAtCaret, splitMentions } from "../utils/disputeMentions";
+import { applyMention, filterParties, findMentionQuery, insertMentionAtCaret } from "../utils/disputeMentions";
+import MentionText from "./MentionText";
 
 const SENDER_STYLES = {
   admin: { label: "ProofPay admin", box: "border-blue-200 bg-blue-50", name: "text-blue-800" },
@@ -121,11 +122,7 @@ export default function DisputeThread({ messages = [], onSend, placeholder, send
                 </div>
                 {message.text && (
                   <p className="mt-1 whitespace-pre-wrap text-slate-800">
-                    {splitMentions(message.text, parties || []).map((piece, pieceIndex) =>
-                      piece.mention
-                        ? <span key={pieceIndex} className="font-semibold text-blue-700">{piece.text}</span>
-                        : piece.text
-                    )}
+                    <MentionText text={message.text} parties={parties} />
                   </p>
                 )}
                 {message.evidence?.length > 0 && (
