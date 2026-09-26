@@ -49,6 +49,13 @@ import {
 } from "./lib/adminAuth.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { get as getBlob, put as putBlob } from "@vercel/blob";
+import {
+  canUploadDocuments,
+  canViewDocuments,
+  dealPartySide,
+  documentSlotsLeft,
+  MAX_DEAL_DOCUMENTS_PER_SIDE,
+} from "./lib/documents.js";
 import { validateCircleConfig } from "./services/circleService.js";
 
 dotenv.config();
@@ -442,7 +449,7 @@ function participantSide(escrow, wallet) {
     : "seller";
 }
 
-async function saveEvidenceFiles(escrowId, side, files = []) {
+async function saveEvidenceFiles(escrowId, side, files = [], folder = "disputes") {
   if (!Array.isArray(files) || files.length > MAX_EVIDENCE_FILES) {
     throw new Error(`Attach up to ${MAX_EVIDENCE_FILES} evidence files.`);
   }
@@ -465,7 +472,7 @@ async function saveEvidenceFiles(escrowId, side, files = []) {
     const extension = file.type === "application/pdf" ? "pdf" : file.type.split("/")[1];
     let blobUrl = "";
     if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const blob = await putBlob(`disputes/${escrowId}/${side}/${id}.${extension}`, content, {
+      const blob = await putBlob(`${folder}/${escrowId}/${side}/${id}.${extension}`, content, {
         access: "private", contentType: file.type, addRandomSuffix: false,
       });
       blobUrl = blob.url;
@@ -1327,6 +1334,7 @@ app.post("/api/escrow", async (req, res) => {
     expectedSeller,                  // PR-3: normalized to lowercase
     status: "Waiting Seller",
     verificationCode: "",
+    documents: [],                   // set only by the upload route below, never by the client
 
     isPermanent: false,
     createdAt: Date.now(),
@@ -2125,6 +2133,70 @@ app.get("/api/escrow/:id/dispute", requireAuth(), async (req, res) => {
   return res.json({ success: true, dispute: escrow.dispute, escrow: sanitizeEscrow(escrow, wallet, adminWalletDspG) });
 });
 
+// ---------------------------------------------------------------------------
+// Deal documents: agreements, screenshots and other proof the buyer or the seller
+// attaches while the deal is open. Only the deal's own buyer and seller can list,
+// upload or open them. The admin has NO access, before or after a dispute; if a
+// dispute is opened, each side attaches what it wants the admin to see again
+// through the dispute's own evidence and messages. See lib/documents.js.
+// ---------------------------------------------------------------------------
+app.post("/api/escrow/:id/documents", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address;
+  const { files } = req.body || {};
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
+
+  const side = dealPartySide(escrow, wallet);
+  if (!side) return res.status(403).json({ success: false, message: "Only the buyer or the seller of this deal can add documents." });
+  if (!canUploadDocuments(escrow)) {
+    return res.status(400).json({
+      success: false,
+      message: "Documents can only be added while the deal is open. Once a dispute is opened, attach proof in the dispute instead.",
+    });
+  }
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ success: false, message: "Choose at least one file." });
+  }
+  const slotsLeft = documentSlotsLeft(escrow, side);
+  if (files.length > slotsLeft) {
+    return res.status(400).json({
+      success: false,
+      message: slotsLeft === 0
+        ? `You already added the maximum of ${MAX_DEAL_DOCUMENTS_PER_SIDE} documents.`
+        : `You can add ${slotsLeft} more document${slotsLeft === 1 ? "" : "s"} (maximum ${MAX_DEAL_DOCUMENTS_PER_SIDE}).`,
+    });
+  }
+
+  let saved;
+  try {
+    saved = await saveEvidenceFiles(escrow.escrowId, side, files, "deals");
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Unable to attach files." });
+  }
+
+  escrow.documents = [...(Array.isArray(escrow.documents) ? escrow.documents : []), ...saved];
+  await saveEscrows(allEscrows);
+  const adminWalletDoc = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDoc) });
+});
+
+app.get("/api/escrow/:id/documents/:fileId", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address;
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow || !canViewDocuments(escrow, wallet)) return res.sendStatus(403);
+  const file = (Array.isArray(escrow.documents) ? escrow.documents : []).find((entry) => entry.id === req.params.fileId);
+  if (!file) return res.sendStatus(404);
+  if (file.blobUrl) {
+    const blob = await getBlob(file.blobUrl, { access: "private" });
+    if (!blob?.stream) return res.sendStatus(404);
+    const content = Buffer.from(await new Response(blob.stream).arrayBuffer());
+    return res.type(file.type).send(content);
+  }
+  return res.type(file.type).sendFile(path.resolve(evidenceDirectory, escrow.escrowId, file.path));
+});
+
 app.get("/api/escrow/:id/dispute/evidence/:fileId", requireAuth(), async (req, res) => {
   const wallet = req.auth.address; // PR-3: use JWT address
   const allEscrows = await loadEscrows();
@@ -2530,7 +2602,8 @@ app.get("/api/escrows", async (req, res) => {
 
   res.json({
     success: true,
-    escrows: activeEscrows,
+    // Deal documents are for the buyer and seller only, and this list is public.
+    escrows: activeEscrows.map(({ documents, ...rest }) => rest), // eslint-disable-line no-unused-vars
   });
 
 });

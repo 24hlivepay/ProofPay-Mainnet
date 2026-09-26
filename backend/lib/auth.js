@@ -22,6 +22,7 @@ import crypto from "crypto";
 import { ethers } from "ethers";
 import jwt from "jsonwebtoken";
 import axios from "axios";
+import { canViewDocuments, publicDocuments } from "./documents.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -504,6 +505,7 @@ export function verifyJwt(token, secret, prevSecret = null) {
  *
  * Visibility:
  *   verificationCode — seller only (SellerVerification page shows it)
+ *   documents        — the deal's own buyer and seller ONLY (never the admin), public fields only
  *   buyerEmail       — buyer, seller, admin
  *   sellerEmail      — buyer, seller, admin
  *   (never to unauthenticated or unrelated callers)
@@ -534,6 +536,16 @@ export function sanitizeEscrow(escrow, callerAddress, adminAddress) {
   if (!isParticipant) {
     delete out.buyerEmail;
     delete out.sellerEmail;
+  }
+
+  // Deal documents can hold private material: only the deal's own buyer and
+  // seller see them (the seller pinned by the buyer counts before they accept).
+  // The admin gets none, and neither does anyone else. Parties see public
+  // fields only, never the storage path, URL or hash.
+  if (canViewDocuments(escrow, callerAddress)) {
+    out.documents = publicDocuments(escrow);
+  } else {
+    delete out.documents;
   }
 
   return out;
