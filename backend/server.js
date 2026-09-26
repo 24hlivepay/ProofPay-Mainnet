@@ -48,6 +48,7 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
+import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
 import { handleUpload as handleClientUpload } from "@vercel/blob/client";
 import {
@@ -1335,7 +1336,7 @@ app.post("/api/escrow", async (req, res) => {
   const escrowId = "PP-" + crypto.randomBytes(5).toString("hex").toUpperCase();
 
   const escrow = {
-    ...req.body,
+    ...pickNewEscrowFields(req.body),
     network,
     assetSymbol,
     assetDecimals: asset.decimals,
@@ -2714,34 +2715,26 @@ app.post("/api/escrow/:id/reject", requireAuth(), async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get("/api/escrows", async (req, res) => {
+app.get("/api/escrows", requireAuth(), async (req, res) => {
 
   const network = getRequestNetwork(req);
   const allEscrows = await loadEscrows();
+  const { category, role } = req.query;
 
-  const { category, buyerWallet, wallet, role } = req.query;
-  const allowedStatuses = ESCROW_STATUS_CATEGORIES[category] || ESCROW_STATUS_CATEGORIES.active;
-  const connectedWallet = (wallet || buyerWallet || "").toLowerCase();
-  const recordRole = role === "seller" ? "seller" : "buyer";
-
-  const activeEscrows = allEscrows.filter((escrow) => {
-    if (escrowNetwork(escrow) !== network) return false;
-
-    const belongsToConnectedWallet = !connectedWallet || (
-      recordRole === "seller"
-        ? escrow.sellerWallet?.toLowerCase() === connectedWallet
-        : escrow.buyerWallet?.toLowerCase() === connectedWallet
-    );
-
-    if (!belongsToConnectedWallet) return false;
-    if (category === "disputes") return Boolean(escrow.dispute);
-    return allowedStatuses.includes(escrow.status);
-  });
-
+  // Only the signed-in wallet's own deals: the wallet comes from the token, so a
+  // query parameter can never ask for someone else's list.
   res.json({
     success: true,
-    // Deal documents are for the buyer and seller only, and this list is public.
-    escrows: activeEscrows.map(({ documents, ...rest }) => rest), // eslint-disable-line no-unused-vars
+    escrows: listEscrowsForCaller({
+      allEscrows,
+      network,
+      escrowNetwork,
+      category,
+      statusCategories: ESCROW_STATUS_CATEGORIES,
+      role,
+      callerAddress: req.auth.address,
+      adminAddress: process.env.DISPUTE_ADMIN_WALLET,
+    }),
   });
 
 });
