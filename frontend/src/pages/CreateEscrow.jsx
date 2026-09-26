@@ -360,7 +360,7 @@ export default function CreateEscrow() {
                   Agreement or proof <span className="font-normal text-slate-500">(optional)</span>
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  PDF, JPG, PNG or WEBP, up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, 2 MB each. Uploaded when you press Create Escrow.
+                  PDF, JPG, PNG or WEBP, up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, 10 MB each. Uploaded when you press Create Escrow.
                 </p>
                 <p className="mt-1 text-xs text-slate-500">{DOCUMENT_PRIVACY_LINE}</p>
                 <ChooseFilesButton onChoose={(chosen) => setDocumentFiles((current) => mergeSelectedFiles(current, chosen))} />
