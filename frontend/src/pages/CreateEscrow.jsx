@@ -16,12 +16,10 @@ import {
 import { getEscrowAsset, getEscrowAssets } from "../config/escrowAssets";
 import { getProfileEmail, getProfileName } from "../utils/profile";
 import { shortenAddress } from "../utils/address";
-import { DOCUMENT_PRIVACY_NOTE } from "../components/DealDocuments";
+import { ChooseFilesButton, DOCUMENT_PRIVACY_LINE, SelectedFileList } from "../components/DealDocuments";
 import {
-  DOCUMENT_ACCEPT,
   MAX_DEAL_DOCUMENTS_PER_SIDE,
   checkDocumentFiles,
-  formatFileSize,
   mergeSelectedFiles,
   uploadDealDocuments,
 } from "../utils/dealDocuments";
@@ -358,55 +356,19 @@ export default function CreateEscrow() {
               <textarea rows={3} placeholder="Deal Description (Optional)" value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500" />
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label className="block text-sm font-semibold text-slate-700">
+                <p className="text-sm font-semibold text-slate-700">
                   Agreement or proof <span className="font-normal text-slate-500">(optional)</span>
-                  <input
-                    multiple
-                    type="file"
-                    accept={DOCUMENT_ACCEPT}
-                    onChange={(event) => {
-                      const chosen = [...event.target.files];
-                      event.target.value = "";
-                      setDocumentFiles((current) => mergeSelectedFiles(current, chosen));
-                    }}
-                    className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
-                  />
-                </label>
+                </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, JPG, PNG, WEBP or PDF, 2 MB each.{" "}
-                  {DOCUMENT_PRIVACY_NOTE}
+                  PDF, JPG, PNG or WEBP, up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files, 2 MB each. Uploaded when you press Create Escrow.
                 </p>
-                <p className="mt-1 text-xs font-semibold text-slate-600">
-                  The files you choose are uploaded automatically when you press Create Escrow.
-                </p>
-                {documentFiles.length > 0 && (
-                  <div className="mt-2 text-sm">
-                    <p className="text-xs font-semibold text-slate-600">
-                      {documentFiles.length} of {MAX_DEAL_DOCUMENTS_PER_SIDE} files selected
-                    </p>
-                    <ul className="mt-1 space-y-1">
-                      {documentFiles.map((file) => (
-                        <li key={`${file.name}:${file.size}`} className="flex items-center justify-between gap-3">
-                          <span className="break-all">
-                            {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setDocumentFiles((current) => current.filter((item) => item !== file))}
-                            className="shrink-0 text-xs font-semibold text-red-600 underline"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    {documentFiles.length > MAX_DEAL_DOCUMENTS_PER_SIDE && (
-                      <p className="mt-1 text-xs text-red-700">
-                        You can attach at most {MAX_DEAL_DOCUMENTS_PER_SIDE} files. Remove some to continue.
-                      </p>
-                    )}
-                  </div>
-                )}
+                <p className="mt-1 text-xs text-slate-500">{DOCUMENT_PRIVACY_LINE}</p>
+                <ChooseFilesButton onChoose={(chosen) => setDocumentFiles((current) => mergeSelectedFiles(current, chosen))} />
+                <SelectedFileList
+                  files={documentFiles}
+                  maxFiles={MAX_DEAL_DOCUMENTS_PER_SIDE}
+                  onRemove={(file) => setDocumentFiles((current) => current.filter((item) => item !== file))}
+                />
               </div>
 
               {/* PR-3: required seller wallet lock */}

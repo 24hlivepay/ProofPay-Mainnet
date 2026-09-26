@@ -6,14 +6,67 @@ import {
   MAX_DEAL_DOCUMENTS_PER_SIDE,
   OPEN_DEAL_STATUSES,
   checkDocumentFiles,
+  fileProblem,
   formatFileSize,
   mergeSelectedFiles,
   openDealDocument,
   uploadDealDocuments,
 } from "../utils/dealDocuments";
 
-export const DOCUMENT_PRIVACY_NOTE =
-  "Only you and the other party in this deal can open these files. The ProofPay admin cannot see them. If a dispute is opened, attach anything you want the admin to see again inside the dispute. Never upload passwords, seed phrases or private keys.";
+export const DOCUMENT_PRIVACY_LINE =
+  "Only you and the other party can open these files, not the ProofPay admin. Never upload passwords or keys.";
+
+// One clear "Choose files" button. The native file box is hidden, so there is no
+// "No file chosen" text (the page shows its own list of what was chosen).
+export function ChooseFilesButton({ onChoose }) {
+  return (
+    <label className="mt-3 inline-block cursor-pointer rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white focus-within:ring-2 focus-within:ring-blue-300 hover:bg-blue-700">
+      Choose files
+      <input
+        multiple
+        type="file"
+        accept={DOCUMENT_ACCEPT}
+        className="sr-only"
+        onChange={(event) => {
+          const chosen = [...event.target.files];
+          event.target.value = "";
+          onChoose(chosen);
+        }}
+      />
+    </label>
+  );
+}
+
+// The files chosen so far, each with a Remove button and a red note when it cannot
+// be uploaded (too big, wrong type).
+export function SelectedFileList({ files, onRemove, maxFiles }) {
+  if (files.length === 0) return null;
+  return (
+    <div className="mt-3 text-sm">
+      <ul className="space-y-1">
+        {files.map((file) => {
+          const problem = fileProblem(file);
+          return (
+            <li key={`${file.name}:${file.size}`} className="flex items-start justify-between gap-3">
+              <span className="break-all">
+                {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
+                {problem && <span className="ml-2 text-xs font-semibold text-red-700">{problem}</span>}
+              </span>
+              <button type="button" onClick={() => onRemove(file)} className="shrink-0 text-xs font-semibold text-red-600 underline">
+                Remove
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {files.length > maxFiles && (
+        <p className="mt-1 text-xs text-red-700">
+          You can attach {maxFiles} file{maxFiles === 1 ? "" : "s"}. Remove some to continue.
+        </p>
+      )}
+    </div>
+  );
+}
 
 // The deal's agreement / proof documents for the buyer or the seller viewing the
 // page. It loads the deal itself, so a page only needs the escrow id. It renders
@@ -22,7 +75,6 @@ export const DOCUMENT_PRIVACY_NOTE =
 export default function DealDocuments({ escrowId }) {
   const [escrow, setEscrow] = useState(null);
   const [files, setFiles] = useState([]);
-  const [inputKey, setInputKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -68,7 +120,6 @@ export default function DealDocuments({ escrowId }) {
     const { failed } = await uploadDealDocuments(escrowId, files);
     await load();
     setFiles([]);
-    setInputKey((key) => key + 1);
     setBusy(false);
     setMessage(
       failed.length > 0
@@ -102,62 +153,28 @@ export default function DealDocuments({ escrowId }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <h3 className="font-bold text-slate-900">Agreement &amp; proof <span className="font-normal text-slate-500">(optional)</span></h3>
-      <p className="mt-1 text-xs text-slate-500">{DOCUMENT_PRIVACY_NOTE}</p>
+      <p className="mt-1 text-xs text-slate-500">{DOCUMENT_PRIVACY_LINE}</p>
 
       {renderDocumentList("Your documents", mine)}
       {renderDocumentList(mySide === "buyer" ? "Seller's documents" : "Buyer's documents", theirs)}
 
       {canUpload && slotsLeft > 0 && (
         <div className="mt-4">
-          <label className="block text-sm font-semibold text-slate-700">
-            Add documents
-            <input
-              key={inputKey}
-              multiple
-              type="file"
-              accept={DOCUMENT_ACCEPT}
-              onChange={(event) => {
-                const chosen = [...event.target.files];
-                event.target.value = "";
-                setFiles((current) => mergeSelectedFiles(current, chosen));
-              }}
-              className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
-            />
-          </label>
+          <p className="text-sm font-semibold text-slate-700">Add documents</p>
           <p className="mt-1 text-xs text-slate-500">
-            A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files in total from you, JPG, PNG, WEBP or PDF, 2 MB each.
-            You can still add {slotsLeft}.
+            PDF, JPG, PNG or WEBP, 2 MB each. You can add {slotsLeft} more.
           </p>
-          {files.length > 0 && (
-            <div className="mt-2 text-sm">
-              <ul className="space-y-1">
-                {files.map((file) => (
-                  <li key={`${file.name}:${file.size}`} className="flex items-center justify-between gap-3">
-                    <span className="break-all">
-                      {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setFiles((current) => current.filter((item) => item !== file))}
-                      className="shrink-0 text-xs font-semibold text-red-600 underline"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {files.length > slotsLeft && (
-                <p className="mt-1 text-xs text-red-700">
-                  You can add {slotsLeft} more file{slotsLeft === 1 ? "" : "s"}. Remove some to continue.
-                </p>
-              )}
-            </div>
-          )}
+          <ChooseFilesButton onChoose={(chosen) => setFiles((current) => mergeSelectedFiles(current, chosen))} />
+          <SelectedFileList
+            files={files}
+            maxFiles={slotsLeft}
+            onRemove={(file) => setFiles((current) => current.filter((item) => item !== file))}
+          />
           <button
             type="button"
             disabled={busy || files.length === 0}
             onClick={handleUpload}
-            className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy
               ? "Uploading..."
