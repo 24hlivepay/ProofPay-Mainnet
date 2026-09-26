@@ -7,6 +7,7 @@ import PrimaryButton from "../components/PrimaryButton";
 
 import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
+import DealDocuments from "../components/DealDocuments";
 
 export default function WaitingSeller() {
   const { walletSlot } = useWalletBadge();
@@ -287,6 +288,8 @@ export default function WaitingSeller() {
             </div>
 
             </div>
+
+          <div className="mt-5"><DealDocuments escrowId={escrowData.escrowId} /></div>
 
           {/* Live Status */}
 

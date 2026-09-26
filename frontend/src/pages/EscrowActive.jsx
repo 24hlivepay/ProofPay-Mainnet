@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { useEscrow } from "../context/EscrowContext";
+import DealDocuments from "../components/DealDocuments";
 import api from "../services/api";
 import { releaseFundsOnChain } from "../services/proofpayContract";
 import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
@@ -90,6 +91,8 @@ export default function EscrowActive() {
               {escrowData.transactionHash && <SummaryRow label="Latest transaction" value={escrowData.transactionHash} />}
             </div>
           </div>
+
+          <div className="mt-6"><DealDocuments escrowId={escrowData.escrowId} /></div>
 
           <h2 className={`mt-8 text-2xl font-bold ${delivered ? "text-blue-700" : "text-yellow-700"}`}>{delivered ? "Seller Confirmed Delivery" : "Funds Locked"}</h2>
 

@@ -7,6 +7,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import CopyButton from "../components/CopyButton";
 import api from "../services/api";
 import { useEscrow } from "../context/EscrowContext";
+import DealDocuments from "../components/DealDocuments";
 import { fundEscrow } from "../services/proofpayContract";
 import { connectWalletWithOptions } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -179,6 +180,8 @@ export default function BuyerDeposit() {
               <SummaryRow label="Escrow ID" value={escrowData.escrowId} />
             </div>
           </div>
+
+          <div className="mt-6"><DealDocuments escrowId={escrowData.escrowId} /></div>
 
           <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5 sm:p-6">
             <h2 className="text-2xl font-bold text-blue-700">Seller Verification</h2>
