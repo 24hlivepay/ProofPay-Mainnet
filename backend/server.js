@@ -901,7 +901,6 @@ const escrowFunctions = new Set([
   "createEscrow(string,address,uint256)",
   "confirmDelivery(string)",
   "releaseFunds(string)",
-  "refund(string)",
   "openDispute(string)",
 ]);
 const APPROVE_FUNCTION = new Set(["approve(address,uint256)"]);

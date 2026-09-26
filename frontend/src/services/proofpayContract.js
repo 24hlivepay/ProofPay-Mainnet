@@ -19,7 +19,6 @@ const ESCROW_ABI = [
   "function createEscrow(string escrowId, address seller, uint256 amount)",
   "function confirmDelivery(string escrowId)",
   "function releaseFunds(string escrowId)",
-  "function refund(string escrowId)",
   "function openDispute(string escrowId)",
   "function resolveDispute(string escrowId, uint256 buyerAmount)",
   "function getEscrow(string escrowId) view returns (address buyer, address seller, uint256 amount, uint8 status)",
@@ -690,43 +689,6 @@ export async function releaseFundsOnChain(
     }
 
     onSubmitted?.(transaction.hash);
-    await transaction.wait();
-    return transaction.hash;
-  } catch (error) {
-    throw new Error(readableError(error));
-  }
-}
-
-export async function refundOnChain(escrowId, assetSymbol = "USDC") {
-  const asset = getEscrowAsset(assetSymbol);
-
-  if (isCircleWallet()) {
-    const transaction = await executeCircleProofPay({
-      contractAddress: asset.escrowAddress,
-      abiFunctionSignature: "refund(string)",
-      abiParameters: [escrowId],
-      display: {
-        title: "Refund Escrow",
-        subtitle: `Return the locked ${asset.symbol} to the buyer.`,
-        amount: "0",
-        symbol: asset.symbol,
-        fromLabel: "Your wallet",
-        from: localStorage.getItem("proofpay-wallet"),
-        contractLabel: "Verified contract",
-        contractName: "ProofPay Escrow",
-        totalLabel: "Action",
-        total: `Refund locked ${asset.symbol} to buyer`,
-        confirmLabel: "Confirm Refund",
-        action: "Refund escrow",
-        details: [`Escrow ID: ${escrowId}`, `Network: ${getNetworkConfig().chainName}`],
-      },
-    });
-    return transaction.hash;
-  }
-
-  try {
-    const { escrow } = await getContracts(assetSymbol);
-    const transaction = await escrow.refund(escrowId);
     await transaction.wait();
     return transaction.hash;
   } catch (error) {
