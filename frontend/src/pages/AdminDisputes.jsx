@@ -12,6 +12,7 @@ import DisputeThread from "../components/DisputeThread";
 import { openEvidence } from "../utils/evidence";
 import { buildDisputeParties } from "../utils/disputeMentions";
 import MentionTextarea from "../components/MentionTextarea";
+import MentionText from "../components/MentionText";
 
 export default function AdminDisputes() {
   useAdminGate();
@@ -56,8 +57,8 @@ function ResolvedCase({ escrow, wallet }) {
     </div>
 
     <div className="mt-4 grid gap-4 md:grid-cols-2">
-      <section><h3 className="font-bold">{dispute.openedBySide} claim</h3><StatementBox escrowId={escrow.escrowId} statement={dispute.statement} evidence={dispute.evidence} /></section>
-      {(dispute.responses || []).map((response, index) => <section key={index}><h3 className="font-bold">{response.side} response</h3><StatementBox escrowId={escrow.escrowId} statement={response.statement} evidence={response.evidence} /></section>)}
+      <section><h3 className="font-bold">{dispute.openedBySide} claim</h3><StatementBox escrowId={escrow.escrowId} statement={dispute.statement} evidence={dispute.evidence} parties={buildDisputeParties(escrow)} /></section>
+      {(dispute.responses || []).map((response, index) => <section key={index}><h3 className="font-bold">{response.side} response</h3><StatementBox escrowId={escrow.escrowId} statement={response.statement} evidence={response.evidence} parties={buildDisputeParties(escrow)} /></section>)}
     </div>
 
     
@@ -66,7 +67,7 @@ function ResolvedCase({ escrow, wallet }) {
 
     <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
       <p className="font-bold text-green-900">Admin decision</p>
-      {resolution.note && <p className="mt-2 whitespace-pre-wrap text-sm text-green-800">{resolution.note}</p>}
+      {resolution.note && <p className="mt-2 whitespace-pre-wrap text-sm text-green-800"><MentionText text={resolution.note} parties={buildDisputeParties(escrow)} /></p>}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm"><p className="font-semibold text-green-900">{resolution.buyerAmount} to buyer · {resolution.sellerAmount} to seller</p><a className="text-blue-700 underline" target="_blank" rel="noreferrer" href={getExplorerTxUrl(resolution.transactionHash)}>View settlement ↗</a></div>
     </div>
   </article>;
@@ -128,9 +129,9 @@ function EvidenceLink({ escrowId, file, hideSide = false }) {
 
 // A party's written statement together with the proof they attached to it, in one
 // box, the same way the buyer and seller see it on their own dispute page.
-function StatementBox({ escrowId, statement, evidence = [] }) {
+function StatementBox({ escrowId, statement, evidence = [], parties }) {
   return <div className="mt-2 rounded-xl bg-slate-50 p-3 text-sm">
-    <p className="whitespace-pre-wrap">{statement}</p>
+    <p className="whitespace-pre-wrap"><MentionText text={statement} parties={parties} /></p>
     {evidence.length > 0 && <ul className="mt-3">{evidence.map((file) => <li key={file.id}><EvidenceLink escrowId={escrowId} file={file} hideSide /></li>)}</ul>}
   </div>;
 }
