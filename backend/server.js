@@ -924,20 +924,21 @@ const escrowFunctions = new Set([
 ]);
 const APPROVE_FUNCTION = new Set(["approve(address,uint256)"]);
 
-// Deployed and on-chain-verified 2026-09-16 — see MAINNET_TODO.md step 2
-// for the tx hashes/block numbers. No cirBTC entry: Circle has not
-// published a mainnet cirBTC contract (MAINNET_TODO.md step 1).
+// Mainnet uses ProofPayEscrowV2 (deployed and checked on chain 2026-09-26, see
+// CONTRACTS.md); the v1 mainnet escrows are retired. Each escrow record stores the
+// contract address it was created on. No cirBTC entry: Circle has not published a
+// mainnet cirBTC contract (MAINNET_TODO.md step 1).
 const ESCROW_ASSETS_BY_NETWORK = {
   mainnet: new Map([
     ["USDC", {
       decimals: 6,
       tokenAddress: "0x3600000000000000000000000000000000000000",
-      escrowContractAddress: "0x626B2731A11B39A782992B57ED102012b607BC79",
+      escrowContractAddress: "0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B",
     }],
     ["EURC", {
       decimals: 6,
       tokenAddress: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
-      escrowContractAddress: "0xF6f0178e40dbF82D79e7E90a9b07AB0f32b862C0",
+      escrowContractAddress: "0x7894E539a16b0D1aE272BE4ebF998353C6E15C86",
     }],
   ]),
   // Testnet uses ProofPayEscrowV2 (deployed 2026-09-26, see CONTRACTS.md). The

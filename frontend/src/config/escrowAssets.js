@@ -1,18 +1,21 @@
 import { getCurrentNetworkId, getNetworkConfig } from "./network";
 
 const ASSETS_BY_NETWORK = {
-  // Deployed 2026-09-16. Addresses verified against docs.arc.io and the
-  // on-chain usdc()/owner() getters — see MAINNET_TODO.md for tx hashes.
+  // ProofPayEscrowV2 (no buyer self-refund, two-step owner), deployed on mainnet
+  // 2026-09-26 (block 22880209), replacing the v1 mainnet escrows (0x626B...BC79 and
+  // 0xF6f0...62C0, which held no funds and are retired). The addresses are fixed here
+  // on purpose, with no env override: a stale VITE_MAINNET_* variable must never be able
+  // to point the app back at a retired contract. Token addresses verified against
+  // docs.arc.io; the contracts were checked on chain (owner, token, no refund()).
+  // See CONTRACTS.md for the tx hashes.
   mainnet: [
     {
       symbol: "USDC",
       name: "USD Coin",
       tokenAddress: "0x3600000000000000000000000000000000000000",
       decimals: 6,
-      escrowAddress:
-        import.meta.env.VITE_MAINNET_USDC_ESCROW_ADDRESS ||
-        "0x626B2731A11B39A782992B57ED102012b607BC79",
-      deploymentBlock: 21_188_708,
+      escrowAddress: "0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B",
+      deploymentBlock: 22_880_209,
       isNative: true,
     },
     {
@@ -20,10 +23,8 @@ const ASSETS_BY_NETWORK = {
       name: "Euro Coin",
       tokenAddress: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
       decimals: 6,
-      escrowAddress:
-        import.meta.env.VITE_MAINNET_EURC_ESCROW_ADDRESS ||
-        "0xF6f0178e40dbF82D79e7E90a9b07AB0f32b862C0",
-      deploymentBlock: 21_188_797,
+      escrowAddress: "0x7894E539a16b0D1aE272BE4ebF998353C6E15C86",
+      deploymentBlock: 22_880_209,
       isNative: false,
     },
     // cirBTC intentionally omitted: Circle has not published a mainnet

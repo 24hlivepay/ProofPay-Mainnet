@@ -91,12 +91,16 @@ money out alone. It leaves the contract in only two ways:
    full payment to the seller, or a split.
 
 There must be no buyer-side `refund()` or any other way to pull funds back
-without a dispute. The deployed v1 contracts (testnet and mainnet) still contain
-a buyer-only `refund()` from the original prototype. The app never offers
-it (and the app code that could call it is removed separately), but it cannot
-be removed from those contracts. `foundry/src/ProofPayEscrowV2.sol` is the replacement without it
-(not deployed yet); its tests in `foundry/test/ProofPayEscrowV2.t.sol` enforce
-this rule and must keep passing.
+without a dispute. The original v1 contracts contained a buyer-only `refund()`
+from the prototype; they cannot be changed, so they are retired. `foundry/src/ProofPayEscrowV2.sol`
+is the replacement without it, deployed on both networks (2026-09-26):
+
+| Network | USDC escrow (V2) | EURC escrow (V2) |
+| --- | --- | --- |
+| Arc Testnet | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` | `0x7117B300A01C969082DE898F1B1f699F6e8188B3` |
+| Arc Mainnet | `0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B` | `0x7894E539a16b0D1aE272BE4ebF998353C6E15C86` |
+
+The tests in `foundry/test/ProofPayEscrowV2.t.sol` enforce this rule and must keep passing.
 
 ## Repository structure
 
