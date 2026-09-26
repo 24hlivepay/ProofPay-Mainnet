@@ -12,6 +12,7 @@
   "dependencies": {
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@tailwindcss/vite": "^4.3.3",
+    "@vercel/blob": "^2.8.0",
     "axios": "^1.18.1",
     "ethers": "^6.17.0",
     "react": "^19.2.7",

@@ -48,7 +48,8 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
-import { del as delBlob, get as getBlob, put as putBlob } from "@vercel/blob";
+import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
+import { handleUpload as handleClientUpload } from "@vercel/blob/client";
 import {
   canRemoveDocument,
   canUploadDocuments,
@@ -60,6 +61,12 @@ import {
   publicDocuments,
   removedDocument,
 } from "./lib/documents.js";
+import {
+  DIRECT_UPLOAD_TYPES,
+  MAX_DEAL_DOCUMENT_BYTES,
+  authorizeDirectUpload,
+  registerDirectUpload,
+} from "./lib/directUpload.js";
 import { validateCircleConfig } from "./services/circleService.js";
 
 dotenv.config();
@@ -2183,6 +2190,75 @@ app.post("/api/escrow/:id/documents", requireAuth(), async (req, res) => {
   await saveEscrows(allEscrows);
   const adminWalletDoc = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDoc) });
+});
+
+// ---------------------------------------------------------------------------
+// Large deal documents (up to 10 MB): the browser uploads straight to the private
+// storage, because a serverless request body is limited to about 4.5 MB. Step 1 gets
+// a short-lived token for ONE exact path (only the deal's buyer/seller, only while the
+// deal is open, only that path and the allowed types and size). Step 2 registers the
+// file on the deal after checking what really landed in storage. See lib/directUpload.js.
+// ---------------------------------------------------------------------------
+app.post("/api/escrow/:id/documents/upload-token", requireAuth(), async (req, res) => {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(501).json({ success: false, message: "Uploading files larger than 2 MB is not available on this server." });
+  }
+  const wallet = req.auth.address;
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
+
+  try {
+    const result = await handleClientUpload({
+      request: req,
+      body: req.body,
+      onBeforeGenerateToken: async (pathname) => {
+        const check = authorizeDirectUpload({ escrow, wallet, pathname });
+        if (!check.ok) {
+          const error = new Error(check.message);
+          error.status = check.status;
+          throw error;
+        }
+        return {
+          allowedContentTypes: DIRECT_UPLOAD_TYPES,
+          maximumSizeInBytes: MAX_DEAL_DOCUMENT_BYTES,
+          addRandomSuffix: false,
+          allowOverwrite: false,
+        };
+      },
+    });
+    return res.json(result);
+  } catch (error) {
+    return res.status(error.status || 400).json({ success: false, message: error.message || "Could not start the upload." });
+  }
+});
+
+const dealBlobStorage = {
+  head: (url) => headBlob(url),
+  del: (url) => delBlob(url),
+  async sha256(url) {
+    const blob = await getBlob(url, { access: "private" });
+    if (!blob?.stream) throw new Error("file not readable");
+    const hash = crypto.createHash("sha256");
+    for await (const chunk of blob.stream) hash.update(chunk);
+    return hash.digest("hex");
+  },
+};
+
+app.post("/api/escrow/:id/documents/register", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address;
+  const { pathname, url, name } = req.body || {};
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
+
+  const result = await registerDirectUpload({ escrow, wallet, pathname, url, name, blob: dealBlobStorage });
+  if (!result.ok) return res.status(result.status).json({ success: false, message: result.message });
+
+  escrow.documents = [...(Array.isArray(escrow.documents) ? escrow.documents : []), result.document];
+  await saveEscrows(allEscrows);
+  const adminWalletReg = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
+  return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletReg) });
 });
 
 // The documents of one deal, for its buyer or seller. Unlike GET /api/escrow/:id (which

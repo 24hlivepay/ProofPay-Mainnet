@@ -211,7 +211,7 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
         <div className="mt-4">
           <p className="text-sm font-semibold text-slate-700">Add documents</p>
           <p className="mt-1 text-xs text-slate-500">
-            PDF, JPG, PNG or WEBP, 2 MB each. You can add {slotsLeft} more.
+            PDF, JPG, PNG or WEBP, 10 MB each. You can add {slotsLeft} more.
           </p>
           <ChooseFilesButton onChoose={(chosen) => setFiles((current) => mergeSelectedFiles(current, chosen))} />
           <SelectedFileList

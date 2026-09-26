@@ -1,3 +1,4 @@
+import { put } from "@vercel/blob/client";
 import api from "../services/api";
 import { MAX_EVIDENCE_BYTES, readEvidenceFiles } from "./evidence";
 
@@ -9,6 +10,12 @@ export const DOCUMENT_ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf";
 export const OPEN_DEAL_STATUSES = ["Waiting Seller", "Seller Accepted", "Funds Locked", "Delivered"];
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const EXTENSIONS = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+// A document can be up to 10 MB. Files of 2 MB or less go through the API as before; larger
+// ones go straight from the browser to the private storage (a request through the API is
+// limited to about 4.5 MB). Same limit as the backend (backend/lib/directUpload.js).
+export const MAX_DEAL_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 export function formatFileSize(bytes) {
   if (!Number.isFinite(bytes)) return "";
@@ -19,7 +26,7 @@ export function formatFileSize(bytes) {
 // A short reason a single chosen file cannot be uploaded, or "" if it is fine.
 export function fileProblem(file) {
   if (!ALLOWED_TYPES.includes(file.type)) return "not a PDF, JPG, PNG or WEBP";
-  if (file.size > MAX_EVIDENCE_BYTES) return "over 2 MB";
+  if (file.size > MAX_DEAL_DOCUMENT_BYTES) return "over 10 MB";
   return "";
 }
 
@@ -49,20 +56,46 @@ export function checkDocumentFiles(files, slotsLeft = MAX_DEAL_DOCUMENTS_PER_SID
   }
   for (const file of files) {
     if (!ALLOWED_TYPES.includes(file.type)) return `${file.name}: only JPG, PNG, WEBP or PDF files are allowed.`;
-    if (file.size > MAX_EVIDENCE_BYTES) return `${file.name} is larger than 2 MB.`;
+    if (file.size > MAX_DEAL_DOCUMENT_BYTES) return `${file.name} is larger than 10 MB.`;
   }
   return "";
 }
 
-// Uploads the files to a deal one request per file, so every request stays well
-// under the server's request-size limit. A file that fails does not stop the
-// rest. Returns the names that failed with the reason.
+// A file larger than 2 MB: ask the API for a short-lived token for ONE exact path, upload
+// straight to the private storage with it, then tell the API to record the file (it checks
+// what really landed in storage). The API's own messages are shown as they are.
+async function uploadLargeDocument(escrowId, file) {
+  const info = await api.get(`/escrow/${escrowId}/documents`);
+  const pathname = `deals/${escrowId}/${info.data.side}/${crypto.randomUUID()}.${EXTENSIONS[file.type]}`;
+
+  const tokenResponse = await api.post(`/escrow/${escrowId}/documents/upload-token`, {
+    type: "blob.generate-client-token",
+    payload: { pathname, clientPayload: null, multipart: false },
+  });
+
+  let blob;
+  try {
+    blob = await put(pathname, file, { access: "private", token: tokenResponse.data.clientToken, contentType: file.type });
+  } catch (error) {
+    throw new Error(`The file could not be uploaded (${error.message || "storage error"}). Please try again.`);
+  }
+
+  await api.post(`/escrow/${escrowId}/documents/register`, { pathname: blob.pathname, url: blob.url, name: file.name });
+}
+
+// Uploads the files to a deal one request per file, so every request stays under the
+// server's request-size limit. A file that fails does not stop the rest. Returns the names
+// that failed with the reason.
 export async function uploadDealDocuments(escrowId, files) {
   const failed = [];
   for (const file of files) {
     try {
-      const encoded = await readEvidenceFiles([file]);
-      await api.post(`/escrow/${escrowId}/documents`, { files: encoded });
+      if (file.size > MAX_EVIDENCE_BYTES) {
+        await uploadLargeDocument(escrowId, file);
+      } else {
+        const encoded = await readEvidenceFiles([file]);
+        await api.post(`/escrow/${escrowId}/documents`, { files: encoded });
+      }
     } catch (error) {
       failed.push({
         name: file.name,
