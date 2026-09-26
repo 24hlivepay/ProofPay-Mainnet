@@ -108,3 +108,17 @@ test("a deal with no timestamps sorts last instead of breaking the list", () => 
   assert.equal(lastActivityAt({}), 0);
   assert.equal(lastActivityAt({ createdAt: "x" }), 0);
 });
+
+// Guard against someone dropping the sign-in requirement again: these two routes
+// used to be public.
+import { readFileSync } from "node:fs";
+const serverSource = readFileSync(new URL("../server.js", import.meta.url), "utf8");
+
+test("creating a deal and listing deals both require a sign-in", () => {
+  assert.match(serverSource, /app\.post\("\/api\/escrow", requireAuth\(\)/);
+  assert.match(serverSource, /app\.get\("\/api\/escrows", requireAuth\(\)/);
+});
+
+test("the buyer of a new deal is taken from the sign-in, not the request body", () => {
+  assert.match(serverSource, /buyerWallet: req\.auth\.address,/);
+});
