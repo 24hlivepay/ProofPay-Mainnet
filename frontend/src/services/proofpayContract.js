@@ -852,3 +852,89 @@ export async function getLiveContractStats() {
 
   return { lockedByAsset: Object.fromEntries(balances) };
 }
+
+// ---------------------------------------------------------------------------
+// Admin: pause / resume NEW escrows on an escrow contract (owner only).
+//
+// pause() only stops new escrows from being created. Escrows that already exist
+// keep working (delivery, release, disputes and the admin's decisions), so a
+// pause can never trap money that is already locked. These use their own small
+// ABI and their own error text, because readableError() above is written for
+// deposits and would say "no funds were moved" on an admin action.
+// ---------------------------------------------------------------------------
+const ESCROW_ADMIN_ABI = [
+  "function owner() view returns (address)",
+  "function paused() view returns (bool)",
+  "function pause()",
+  "function unpause()",
+];
+
+function adminTxError(error) {
+  const message = technicalError(error);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("user rejected") ||
+    normalized.includes("user denied") ||
+    error?.code === 4001
+  ) {
+    return "You cancelled the request in your wallet. Nothing changed.";
+  }
+
+  if (normalized.includes("insufficient funds") || normalized.includes("insufficient balance")) {
+    return "The admin wallet does not have enough USDC for the network fee.";
+  }
+
+  return message;
+}
+
+// Read-only, no wallet needed: is this escrow contract paused, and who owns it?
+export async function readEscrowContractState(assetSymbol = "USDC") {
+  const asset = getEscrowAsset(assetSymbol);
+  const provider = new JsonRpcProvider(getNetworkConfig().rpcUrl);
+  const contract = new Contract(asset.escrowAddress, ESCROW_ADMIN_ABI, provider);
+  const [paused, owner] = await Promise.all([contract.paused(), contract.owner()]);
+  return { symbol: asset.symbol, address: asset.escrowAddress, paused, owner };
+}
+
+// Sends pause() or unpause() from the connected MetaMask/Rabby wallet, and only
+// if that wallet is the contract's on-chain owner. Returns the transaction hash.
+export async function setEscrowPausedOnChain(assetSymbol, shouldPause, onSubmitted) {
+  if (isCircleWallet()) {
+    throw new Error("Pausing needs the MetaMask or Rabby admin wallet, not a Circle email wallet.");
+  }
+
+  const asset = getEscrowAsset(assetSymbol);
+  let wallet;
+
+  try {
+    wallet = await connectWallet();
+  } catch (error) {
+    throw new Error(`Wallet connection failed: ${adminTxError(error)}`);
+  }
+
+  try {
+    const contract = new Contract(asset.escrowAddress, ESCROW_ADMIN_ABI, wallet.signer);
+    const [owner, paused] = await Promise.all([contract.owner(), contract.paused()]);
+
+    if (String(owner).toLowerCase() !== String(wallet.address).toLowerCase()) {
+      throw new Error(
+        "The connected wallet is not the owner of this contract. Switch to the admin wallet and try again."
+      );
+    }
+    if (paused === shouldPause) {
+      throw new Error(
+        shouldPause ? "This contract is already paused." : "This contract is not paused."
+      );
+    }
+
+    const transaction = shouldPause
+      ? await contract.pause({ gasLimit: ARC_STATUS_UPDATE_GAS_LIMIT })
+      : await contract.unpause({ gasLimit: ARC_STATUS_UPDATE_GAS_LIMIT });
+    onSubmitted?.(transaction.hash);
+    await transaction.wait();
+    return transaction.hash;
+  } catch (error) {
+    throw new Error(adminTxError(error));
+  }
+}
