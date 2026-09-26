@@ -2,7 +2,7 @@
 
 Secure peer-to-peer USDC escrow on Arc Testnet.
 
-[Live app](https://proofpay.online) · [Demo video](https://youtu.be/O791txQRc5E) · [Smart contract](https://testnet.arcscan.app/address/0xCd0f43E573899809ff96C560439570A760698C9a) · [Deployment transaction](https://testnet.arcscan.app/tx/0x79e8933c8df6707c0f5a91fc3f0e162f270100eb4514994d6d8536901dfe3f73)
+[Live app](https://proofpay.online) · [Demo video](https://youtu.be/O791txQRc5E) · [Smart contract](https://testnet.arcscan.app/address/0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1) · [Deployment transaction](https://testnet.arcscan.app/tx/0xe89ec93681f74ed0e0ffb7fe6368981c106251c7fa0110aa289420f9d299e7e5)
 
 > ProofPay is currently a public testnet MVP. It does not handle real funds and has not been audited.
 
@@ -68,13 +68,15 @@ React + Vite frontend
 | --- | --- |
 | Network | Arc Testnet |
 | Chain ID | `5042002` |
-| ProofPay escrow | `0xCd0f43E573899809ff96C560439570A760698C9a` |
+| ProofPay escrow (V2, USDC) | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` |
 | Test USDC | `0x3600000000000000000000000000000000000000` |
 | EURC | `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a` |
-| cirBTC | `0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF` |
-| ProofPay USDC Escrow | `0xCd0f43E573899809ff96C560439570A760698C9a` |
-| ProofPay EURC Escrow | `0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7` |
-| ProofPay cirBTC Escrow | `0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B` |
+| ProofPay USDC Escrow (V2) | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` |
+| ProofPay EURC Escrow (V2) | `0x7117B300A01C969082DE898F1B1f699F6e8188B3` |
+
+On 2026-09-26 the app moved to `ProofPayEscrowV2` on testnet. The original v1 testnet
+escrows (USDC `0xCd0f…C9a`, EURC `0xa432…4ca7`, cirBTC `0x8bfe…Ef4B`) are retired and
+no longer used by the app. No cirBTC escrow is offered on testnet until a V2 one is deployed.
 
 The contract uses `SafeERC20`, `ReentrancyGuard`, participant-only state transitions, and an owner-controlled dispute resolution path.
 

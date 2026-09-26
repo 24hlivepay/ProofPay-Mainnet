@@ -30,14 +30,19 @@ const ASSETS_BY_NETWORK = {
     // contract for it (see MAINNET_TODO.md, step 1). Requesting it via
     // getEscrowAsset("cirBTC") on mainnet throws until one exists.
   ],
+  // ProofPayEscrowV2 (no buyer self-refund), deployed 2026-09-26. The addresses
+  // are fixed here on purpose, with no env override: a stale VITE_ variable must
+  // never be able to point the app back at the retired v1 contracts.
+  // See CONTRACTS.md for the tx hashes. cirBTC is not offered on testnet: its v1
+  // escrow was retired and no V2 cirBTC escrow has been deployed.
   testnet: [
     {
       symbol: "USDC",
       name: "USD Coin",
       tokenAddress: "0x3600000000000000000000000000000000000000",
       decimals: 6,
-      escrowAddress: "0xCd0f43E573899809ff96C560439570A760698C9a",
-      deploymentBlock: 53_590_676,
+      escrowAddress: "0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1",
+      deploymentBlock: 64_079_701,
       isNative: true,
     },
     {
@@ -45,21 +50,8 @@ const ASSETS_BY_NETWORK = {
       name: "Euro Coin",
       tokenAddress: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
       decimals: 6,
-      escrowAddress:
-        import.meta.env.VITE_EURC_ESCROW_ADDRESS ||
-        "0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7",
-      deploymentBlock: 53_590_676,
-      isNative: false,
-    },
-    {
-      symbol: "cirBTC",
-      name: "Circle Wrapped Bitcoin",
-      tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
-      decimals: 8,
-      escrowAddress:
-        import.meta.env.VITE_CIRBTC_ESCROW_ADDRESS ||
-        "0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B",
-      deploymentBlock: 53_590_676,
+      escrowAddress: "0x7117B300A01C969082DE898F1B1f699F6e8188B3",
+      deploymentBlock: 64_079_701,
       isNative: false,
     },
   ],
