@@ -73,6 +73,16 @@ export async function uploadDealDocuments(escrowId, files) {
   return { failed };
 }
 
+// Removes one of YOUR OWN documents from a deal that is still open. The stored copy is
+// deleted; the other party keeps seeing a "removed" marker (name, who, when).
+export async function removeDealDocument(escrowId, file) {
+  try {
+    await api.delete(`/escrow/${escrowId}/documents/${file.id}`);
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Unable to remove this file.");
+  }
+}
+
 // Documents are private: the endpoint needs the session token, which a plain link
 // cannot send, so fetch through the authenticated client and open the blob. The
 // tab is opened inside the click so popup blockers allow it.
