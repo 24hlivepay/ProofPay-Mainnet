@@ -922,21 +922,18 @@ const ESCROW_ASSETS_BY_NETWORK = {
       escrowContractAddress: "0xF6f0178e40dbF82D79e7E90a9b07AB0f32b862C0",
     }],
   ]),
+  // Testnet uses ProofPayEscrowV2 (deployed 2026-09-26, see CONTRACTS.md). The
+  // retired v1 testnet escrows and the cirBTC escrow are intentionally gone.
   testnet: new Map([
     ["USDC", {
       decimals: 6,
       tokenAddress: "0x3600000000000000000000000000000000000000",
-      escrowContractAddress: "0xCd0f43E573899809ff96C560439570A760698C9a",
+      escrowContractAddress: "0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1",
     }],
     ["EURC", {
       decimals: 6,
       tokenAddress: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
-      escrowContractAddress: "0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7",
-    }],
-    ["cirBTC", {
-      decimals: 8,
-      tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
-      escrowContractAddress: "0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B",
+      escrowContractAddress: "0x7117B300A01C969082DE898F1B1f699F6e8188B3",
     }],
   ]),
 };

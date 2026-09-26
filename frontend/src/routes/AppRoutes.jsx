@@ -27,6 +27,7 @@ import AdminDisputes from "../pages/AdminDisputes";
 import AdminLogin from "../pages/AdminLogin";
 import AdminEscrows from "../pages/AdminEscrows";
 import AdminAuditLog from "../pages/AdminAuditLog";
+import AdminContracts from "../pages/AdminContracts";
 import OrderHistory from "../pages/OrderHistory";
 import Profile from "../pages/Profile";
 import PendingOrders from "../pages/PendingOrders";
@@ -116,6 +117,7 @@ export default function AppRoutes() {
       <Route path="/admin/disputes" element={<AdminDisputes />} />
       <Route path="/admin/escrows" element={<AdminEscrows />} />
       <Route path="/admin/audit-log" element={<AdminAuditLog />} />
+      <Route path="/admin/contracts" element={<AdminContracts />} />
 
       {/* Seller */}
       <Route path="/seller-landing" element={<SellerLanding />} />

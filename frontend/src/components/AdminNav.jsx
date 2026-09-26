@@ -4,6 +4,7 @@ const TABS = [
   { to: "/admin/disputes", label: "Disputes" },
   { to: "/admin/escrows", label: "All Escrows" },
   { to: "/admin/audit-log", label: "Audit Log" },
+  { to: "/admin/contracts", label: "Contracts" },
 ];
 
 export default function AdminNav() {

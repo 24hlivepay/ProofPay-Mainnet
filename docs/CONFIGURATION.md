@@ -27,8 +27,10 @@ persistent storage.
 | --- | --- | --- |
 | `VITE_API_URL` | Yes | `/api` |
 | `VITE_CIRCLE_APP_ID` | Yes | Circle User-Controlled Wallet application ID |
-| `VITE_EURC_ESCROW_ADDRESS` | Yes | `0xa4322D8ba3E040A3028FD6ABaC3c6a5625ed4ca7` |
-| `VITE_CIRBTC_ESCROW_ADDRESS` | Yes | `0x8bfeD6F70Eb595946543b192b6E63d75A0bBEf4B` |
+
+Escrow contract addresses are no longer environment variables: they are fixed in
+`frontend/src/config/escrowAssets.js` and `backend/server.js`. Delete the old
+`VITE_EURC_ESCROW_ADDRESS` and `VITE_CIRBTC_ESCROW_ADDRESS` from Vercel if they are set.
 
 After changing any `VITE_` variable, rebuild/redeploy the frontend because Vite
 embeds these values at build time.
