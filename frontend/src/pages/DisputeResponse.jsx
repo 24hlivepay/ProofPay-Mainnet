@@ -6,6 +6,7 @@ import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
+import MentionTextarea from "../components/MentionTextarea";
 import DealDocuments from "../components/DealDocuments";
 import { openEvidence } from "../utils/evidence";
 import { buildDisputeParties } from "../utils/disputeMentions";
@@ -150,7 +151,7 @@ export default function DisputeResponse() {
         : alreadyResponded
           ? <p className="mt-6 rounded-xl bg-blue-50 p-4 text-blue-800">You already submitted a response. ProofPay admin is reviewing both sides.</p>
           : <form onSubmit={submit} className="mt-6 space-y-5">
-            <label className="block font-semibold">Your reply<textarea required value={statement} onChange={(event) => setStatement(event.target.value)} rows="6" className="mt-2 w-full rounded-xl border p-3 font-normal" placeholder="Reply to ProofPay admin or the other party. Explain your side and reference dates or delivery details." /></label>
+            <label className="block font-semibold">Your reply<MentionTextarea required value={statement} onChange={setStatement} parties={buildDisputeParties(order)} selfKey={mySide} rows="6" className="mt-2 w-full rounded-xl border p-3 font-normal" placeholder="Reply to ProofPay admin or the other party. Explain your side and reference dates or delivery details." /></label>
             <label className="block font-semibold">Evidence <span className="font-normal text-slate-500">(optional)</span><input multiple accept=".jpg,.jpeg,.png,.webp,.pdf" type="file" onChange={(event) => setFiles([...event.target.files])} className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700" /><span className="mt-1 block text-xs font-normal text-slate-500">Maximum 5 JPG, PNG, WEBP, or PDF files; 2 MB each. A written explanation alone is enough.</span></label>
             {files.length > 0 && <ul className="rounded-xl bg-slate-50 p-3 text-sm">{files.map((file) => <li key={file.name}>• {file.name}</li>)}</ul>}
             <button disabled={saving} className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:bg-blue-300">{saving ? "Sending..." : "Send reply"}</button>

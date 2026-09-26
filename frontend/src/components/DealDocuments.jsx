@@ -83,6 +83,11 @@ export default function DealDocuments({ escrowId, readOnly = false }) {
   const load = useCallback(async ({ reauth = false } = {}) => {
     try {
       const response = await api.get(`/escrow/${escrowId}/documents`, reauth ? {} : { _skipReauth: true });
+      // An unexpected answer must never take the whole page down: just hide the section.
+      if (!Array.isArray(response.data?.documents) || typeof response.data?.side !== "string") {
+        setState("hidden");
+        return;
+      }
       setInfo(response.data);
       setState("ready");
     } catch (error) {
