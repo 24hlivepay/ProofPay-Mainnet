@@ -291,7 +291,7 @@ export default function SellerAccept() {
               </div>
             </div>
 
-            <div className="mt-6"><DealDocuments escrowId={escrow.escrowId} /></div>
+            <div className="mt-6"><DealDocuments escrowId={escrow.escrowId} readOnly /></div>
 
             {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
 

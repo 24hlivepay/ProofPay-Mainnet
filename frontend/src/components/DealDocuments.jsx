@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../services/api";
-import { getConnectedWallet } from "../services/wallet";
 import {
   DOCUMENT_ACCEPT,
-  MAX_DEAL_DOCUMENTS_PER_SIDE,
-  OPEN_DEAL_STATUSES,
   checkDocumentFiles,
   fileProblem,
   formatFileSize,
@@ -69,21 +66,26 @@ export function SelectedFileList({ files, onRemove, maxFiles }) {
 }
 
 // The deal's agreement / proof documents for the buyer or the seller viewing the
-// page. It loads the deal itself, so a page only needs the escrow id. It renders
-// nothing for anyone who is not the buyer or the seller of this deal (the server
-// sends no documents to them), so it is safe to drop into any deal page.
-export default function DealDocuments({ escrowId }) {
-  const [escrow, setEscrow] = useState(null);
+// page: both parties' files, in every state of the deal (upload is offered only
+// while the deal is open, and never when `readOnly`). A page only needs the escrow
+// id. It renders nothing for anyone who is not the buyer or the seller of this deal.
+// If the sign-in has expired it says so and offers a button, instead of hiding.
+export default function DealDocuments({ escrowId, readOnly = false }) {
+  const [info, setInfo] = useState(null);
+  const [state, setState] = useState("loading"); // loading | ready | signin | hidden
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
-  const load = useCallback(async () => {
+  // Without `reauth`, an expired session must not pop up a wallet signature on its
+  // own; the user presses the button for that.
+  const load = useCallback(async ({ reauth = false } = {}) => {
     try {
-      const response = await api.get(`/escrow/${escrowId}`);
-      setEscrow(response.data.escrow || null);
-    } catch {
-      setEscrow(null);
+      const response = await api.get(`/escrow/${escrowId}/documents`, reauth ? {} : { _skipReauth: true });
+      setInfo(response.data);
+      setState("ready");
+    } catch (error) {
+      setState(error.response?.status === 401 ? "signin" : "hidden");
     }
   }, [escrowId]);
 
@@ -91,14 +93,29 @@ export default function DealDocuments({ escrowId }) {
     if (escrowId) load();
   }, [escrowId, load]);
 
-  if (!escrow || !Array.isArray(escrow.documents)) return null;
+  if (state === "signin") {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <h3 className="font-bold text-slate-900">Agreement &amp; proof</h3>
+        <p className="mt-1 text-xs text-slate-500">Sign in with your wallet again to see this deal's documents.</p>
+        <button
+          type="button"
+          onClick={() => load({ reauth: true })}
+          className="mt-3 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          Sign in to view documents
+        </button>
+      </div>
+    );
+  }
 
-  const wallet = String(getConnectedWallet() || "").toLowerCase();
-  const mySide = wallet && wallet === String(escrow.buyerWallet || "").toLowerCase() ? "buyer" : "seller";
-  const mine = escrow.documents.filter((doc) => doc.side === mySide);
-  const theirs = escrow.documents.filter((doc) => doc.side !== mySide);
-  const canUpload = OPEN_DEAL_STATUSES.includes(escrow.status);
-  const slotsLeft = Math.max(0, MAX_DEAL_DOCUMENTS_PER_SIDE - mine.length);
+  if (state !== "ready" || !info) return null;
+
+  const mySide = info.side;
+  const mine = info.documents.filter((doc) => doc.side === mySide);
+  const theirs = info.documents.filter((doc) => doc.side !== mySide);
+  const canUpload = !readOnly && info.canUpload;
+  const slotsLeft = info.slotsLeft;
 
   async function handleOpen(file) {
     try {

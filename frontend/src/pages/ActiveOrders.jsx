@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import OrderDocuments from "../components/OrderDocuments";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { useEscrow } from "../context/EscrowContext";
 import api from "../services/api";
@@ -291,6 +292,7 @@ export default function ActiveOrders() {
               >
                 Open Dispute
               </button>}
+              <OrderDocuments escrowId={order.escrowId} />
             </article>
             );
           })}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import OrderDocuments from "../components/OrderDocuments";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
@@ -161,6 +162,7 @@ export default function PendingOrders() {
                   <button onClick={() => continueOrder(order)} className="rounded-xl bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700">{order.status === "Seller Accepted" ? `Deposit ${order.assetSymbol || "USDC"}` : "Open Order"}</button>
                 </div>
               )}
+              <OrderDocuments escrowId={order.escrowId} />
             </article>
           ))}
         </div>
