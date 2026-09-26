@@ -1301,7 +1301,7 @@ app.get("/api/health", async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.post("/api/escrow", async (req, res) => {
+app.post("/api/escrow", requireAuth(), async (req, res) => {
   const network = getRequestNetwork(req);
   const assetSymbol = req.body.assetSymbol || "USDC";
   const asset = getEscrowAssets(network).get(assetSymbol);
@@ -1337,6 +1337,8 @@ app.post("/api/escrow", async (req, res) => {
 
   const escrow = {
     ...pickNewEscrowFields(req.body),
+    // The buyer is the signed-in wallet, never whatever the request body claims.
+    buyerWallet: req.auth.address,
     network,
     assetSymbol,
     assetDecimals: asset.decimals,
