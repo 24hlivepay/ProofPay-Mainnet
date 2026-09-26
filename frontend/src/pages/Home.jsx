@@ -90,7 +90,8 @@ export default function Home() {
         const categories = ["pending", "active", "completed", "cancelled", "disputes"];
         const requestCounts = async (role) => {
           const responses = await Promise.all(categories.map((category) => api.get("/escrows", {
-            params: { category, wallet: walletAddress, role },
+            params: { category, role },
+            _skipReauth: true, // background counts must not open a wallet signature popup
           })));
 
           return {
