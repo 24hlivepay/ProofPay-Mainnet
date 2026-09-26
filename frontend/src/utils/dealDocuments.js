@@ -16,6 +16,22 @@ export function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Adds newly chosen files to the ones already chosen. The browser's file box
+// replaces its own selection every time, so the page keeps its own list. The same
+// file (same name and size) is not added twice.
+export function mergeSelectedFiles(current, chosen) {
+  const known = new Set(current.map((file) => `${file.name}:${file.size}`));
+  const added = [];
+  for (const file of chosen) {
+    const key = `${file.name}:${file.size}`;
+    if (!known.has(key)) {
+      known.add(key);
+      added.push(file);
+    }
+  }
+  return [...current, ...added];
+}
+
 // Returns a message for the first problem, or "" when the files can be uploaded.
 export function checkDocumentFiles(files, slotsLeft = MAX_DEAL_DOCUMENTS_PER_SIDE) {
   if (!files || files.length === 0) return "Choose at least one file.";

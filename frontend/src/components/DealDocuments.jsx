@@ -7,6 +7,7 @@ import {
   OPEN_DEAL_STATUSES,
   checkDocumentFiles,
   formatFileSize,
+  mergeSelectedFiles,
   openDealDocument,
   uploadDealDocuments,
 } from "../utils/dealDocuments";
@@ -115,7 +116,11 @@ export default function DealDocuments({ escrowId }) {
               multiple
               type="file"
               accept={DOCUMENT_ACCEPT}
-              onChange={(event) => setFiles([...event.target.files])}
+              onChange={(event) => {
+                const chosen = [...event.target.files];
+                event.target.value = "";
+                setFiles((current) => mergeSelectedFiles(current, chosen));
+              }}
               className="mt-2 block w-full cursor-pointer text-sm font-normal text-slate-600 file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700"
             />
           </label>
@@ -123,6 +128,31 @@ export default function DealDocuments({ escrowId }) {
             A signed agreement (PDF) or screenshots. Up to {MAX_DEAL_DOCUMENTS_PER_SIDE} files in total from you, JPG, PNG, WEBP or PDF, 2 MB each.
             You can still add {slotsLeft}.
           </p>
+          {files.length > 0 && (
+            <div className="mt-2 text-sm">
+              <ul className="space-y-1">
+                {files.map((file) => (
+                  <li key={`${file.name}:${file.size}`} className="flex items-center justify-between gap-3">
+                    <span className="break-all">
+                      {file.name} <span className="text-xs text-slate-500">{formatFileSize(file.size)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFiles((current) => current.filter((item) => item !== file))}
+                      className="shrink-0 text-xs font-semibold text-red-600 underline"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {files.length > slotsLeft && (
+                <p className="mt-1 text-xs text-red-700">
+                  You can add {slotsLeft} more file{slotsLeft === 1 ? "" : "s"}. Remove some to continue.
+                </p>
+              )}
+            </div>
+          )}
           <button
             type="button"
             disabled={busy || files.length === 0}
