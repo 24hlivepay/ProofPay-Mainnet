@@ -16,6 +16,13 @@ export function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// A short reason a single chosen file cannot be uploaded, or "" if it is fine.
+export function fileProblem(file) {
+  if (!ALLOWED_TYPES.includes(file.type)) return "not a PDF, JPG, PNG or WEBP";
+  if (file.size > MAX_EVIDENCE_BYTES) return "over 2 MB";
+  return "";
+}
+
 // Adds newly chosen files to the ones already chosen. The browser's file box
 // replaces its own selection every time, so the page keeps its own list. The same
 // file (same name and size) is not added twice.

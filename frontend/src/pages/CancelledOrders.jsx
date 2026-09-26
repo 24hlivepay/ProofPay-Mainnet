@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import OrderDocuments from "../components/OrderDocuments";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
@@ -30,7 +31,7 @@ export default function CancelledOrders() {
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-3xl font-bold text-slate-900">{isSellerRole ? "Cancelled Sales" : "Cancelled Purchases"}</h1><p className="mt-2 text-slate-600">Escrows cancelled before any selected asset was deposited.</p></div><button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button></div>
         <div className="mt-8 space-y-5">
-          {orders.length === 0 ? <EmptyState seller={isSellerRole} /> : orders.map((order) => <article key={order.escrowId} className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-lg font-bold text-slate-900">{isSellerRole ? "Buyer" : "Seller"}: {(isSellerRole ? order.buyerName : order.sellerName) || "—"}</p><h2 className="mt-1 text-lg font-bold text-slate-900">{order.escrowId}</h2></div><span className="rounded-full bg-red-100 px-4 py-2 text-sm font-bold text-red-700">Cancelled</span></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><Detail label="Product / Service" value={order.productName || "Escrow transaction"} /><Detail label="Amount not deposited" value={`${order.amount} ${order.assetSymbol || "USDC"}`} /><Detail label="Reason" value={order.cancellationReason || "Cancelled"} /></div></article>)}
+          {orders.length === 0 ? <EmptyState seller={isSellerRole} /> : orders.map((order) => <article key={order.escrowId} className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-lg font-bold text-slate-900">{isSellerRole ? "Buyer" : "Seller"}: {(isSellerRole ? order.buyerName : order.sellerName) || "—"}</p><h2 className="mt-1 text-lg font-bold text-slate-900">{order.escrowId}</h2></div><span className="rounded-full bg-red-100 px-4 py-2 text-sm font-bold text-red-700">Cancelled</span></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><Detail label="Product / Service" value={order.productName || "Escrow transaction"} /><Detail label="Amount not deposited" value={`${order.amount} ${order.assetSymbol || "USDC"}`} /><Detail label="Reason" value={order.cancellationReason || "Cancelled"} /></div><OrderDocuments escrowId={order.escrowId} /></article>)}
         </div>
       </main>
     </div>

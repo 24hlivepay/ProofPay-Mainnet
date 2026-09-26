@@ -6,6 +6,7 @@ import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
 import { getExplorerTxUrl } from "../config/network";
 import DisputeThread from "../components/DisputeThread";
+import DealDocuments from "../components/DealDocuments";
 import { openEvidence } from "../utils/evidence";
 import { buildDisputeParties } from "../utils/disputeMentions";
 
@@ -96,6 +97,8 @@ export default function DisputeResponse() {
         <div className="rounded-xl border border-slate-200 p-3"><p className="text-slate-500">Buyer</p><p className="font-semibold text-slate-900">{order.buyerName || "—"}</p><p className="break-all text-xs text-slate-500">{order.buyerWallet}</p></div>
         <div className="rounded-xl border border-slate-200 p-3"><p className="text-slate-500">Seller</p><p className="font-semibold text-slate-900">{order.sellerName || "—"}</p><p className="break-all text-xs text-slate-500">{order.sellerWallet}</p></div>
       </div>
+
+      <div className="mt-4"><DealDocuments escrowId={order.escrowId} readOnly /></div>
 
       {dispute && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h2 className="font-bold text-slate-900">{dispute.openedBySide === "buyer" ? "Buyer" : "Seller"} claim</h2>

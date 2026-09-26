@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import OrderDocuments from "../components/OrderDocuments";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import api from "../services/api";
 import { getConnectedWallet } from "../services/wallet";
@@ -79,6 +80,7 @@ function OrderCard({ order, seller, onViewDispute }) {
           </div>
         </div>
       )}
+      <OrderDocuments escrowId={order.escrowId} />
     </article>
   );
 }
