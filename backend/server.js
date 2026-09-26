@@ -55,6 +55,7 @@ import {
   dealPartySide,
   documentSlotsLeft,
   MAX_DEAL_DOCUMENTS_PER_SIDE,
+  publicDocuments,
 } from "./lib/documents.js";
 import { validateCircleConfig } from "./services/circleService.js";
 
@@ -2179,6 +2180,27 @@ app.post("/api/escrow/:id/documents", requireAuth(), async (req, res) => {
   await saveEscrows(allEscrows);
   const adminWalletDoc = (process.env.DISPUTE_ADMIN_WALLET || "").toLowerCase();
   return res.json({ success: true, escrow: sanitizeEscrow(escrow, wallet, adminWalletDoc) });
+});
+
+// The documents of one deal, for its buyer or seller. Unlike GET /api/escrow/:id (which
+// treats an expired or missing session as an anonymous visitor and just leaves the
+// documents out), this returns 401 when the session is not valid, so the page can ask
+// the user to sign in again instead of silently showing nothing.
+app.get("/api/escrow/:id/documents", requireAuth(), async (req, res) => {
+  const wallet = req.auth.address;
+  const allEscrows = await loadEscrows();
+  const escrow = allEscrows.find((item) => item.escrowId === req.params.id);
+  if (!escrow) return res.status(404).json({ success: false, message: "Escrow Not Found" });
+  const side = dealPartySide(escrow, wallet);
+  if (!side) return res.status(403).json({ success: false, message: "Only the buyer or the seller of this deal can see its documents." });
+  return res.json({
+    success: true,
+    side,
+    status: escrow.status,
+    canUpload: canUploadDocuments(escrow),
+    slotsLeft: documentSlotsLeft(escrow, side),
+    documents: publicDocuments(escrow),
+  });
 });
 
 app.get("/api/escrow/:id/documents/:fileId", requireAuth(), async (req, res) => {
