@@ -19,7 +19,6 @@ import SellerVerification from "../pages/SellerVerification";
 import BuyerDeposit from "../pages/BuyerDeposit";
 import EscrowActive from "../pages/EscrowActive";
 import ReleaseFunds from "../pages/ReleaseFunds";
-import Refund from "../pages/Refund";
 import Dispute from "../pages/Dispute";
 import DisputeResponse from "../pages/DisputeResponse";
 import MyDisputes from "../pages/MyDisputes";
@@ -109,7 +108,6 @@ export default function AppRoutes() {
       <Route path="/deposit" element={<BuyerDeposit />} />
       <Route path="/active" element={<EscrowActive />} />
       <Route path="/release" element={<ReleaseFunds />} />
-      <Route path="/refund" element={<Refund />} />
       <Route path="/dispute" element={<Dispute />} />
       <Route path="/dispute/respond" element={<DisputeResponse />} />
       <Route path="/disputes" element={<MyDisputes />} />

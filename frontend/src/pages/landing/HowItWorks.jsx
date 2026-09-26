@@ -28,7 +28,7 @@ export default function HowItWorks() {
       number: "05",
       title: "Complete Transaction",
       description:
-        "Buyer releases funds after receiving the product or service. Refund and dispute remain available if required.",
+        "Buyer releases funds after receiving the product or service. If the two sides cannot agree, either can open a dispute and an admin decides.",
     },
   ];
 
