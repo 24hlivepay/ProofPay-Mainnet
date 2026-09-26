@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listEscrowsForCaller, pickNewEscrowFields } from "../lib/escrowList.js";
+import { lastActivityAt, listEscrowsForCaller, pickNewEscrowFields } from "../lib/escrowList.js";
 
 const BUYER = "0x1111111111111111111111111111111111111111";
 const SELLER = "0x2222222222222222222222222222222222222222";
@@ -91,4 +91,20 @@ test("non-string fields are dropped, not stored as objects", () => {
   assert.equal(picked.buyerName, "");
   assert.equal(picked.description, "");
   assert.equal(picked.amount, "5");
+});
+
+test("newest activity comes first, so a just-settled dispute tops the completed list", () => {
+  const mk = (escrowId, extra) => ({ escrowId, network: "mainnet", status: "Released", buyerWallet: BUYER, sellerWallet: SELLER, createdAt: 100, ...extra });
+  const all = [
+    mk("old", { releasedAt: 1000 }),
+    mk("mid", { releasedAt: 2000 }),
+    mk("disputed", { createdAt: 50, dispute: { openedAt: 500, resolution: { resolvedAt: 9000 } } }),
+  ];
+  const out = listEscrowsForCaller({ allEscrows: all, network: "mainnet", escrowNetwork, category: "completed", statusCategories: CATEGORIES, role: "buyer", callerAddress: BUYER, adminAddress: ADMIN });
+  assert.deepEqual(out.map((e) => e.escrowId), ["disputed", "mid", "old"]);
+});
+
+test("a deal with no timestamps sorts last instead of breaking the list", () => {
+  assert.equal(lastActivityAt({}), 0);
+  assert.equal(lastActivityAt({ createdAt: "x" }), 0);
 });
