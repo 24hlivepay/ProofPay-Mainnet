@@ -192,17 +192,6 @@ function getCircleHeaders(network) {
   };
 }
 
-// Onramp keys are issued from a dedicated "App Kits -> Onramp Kit" flow in
-// the Circle Console, separate from the CIRCLE_API_KEY(_MAINNET) pair above
-// used for User-Controlled Wallets -- confirmed against the Console's own
-// "Onramp Kit Setup" page, which auto-provisions its own key per network.
-// Reusing the wallets key's env var names would have meant overwriting it,
-// silently breaking Circle wallet email login.
-const CIRCLE_ONRAMP_API_KEY_BY_NETWORK = {
-  testnet: process.env.CIRCLE_ONRAMP_API_KEY,
-  mainnet: process.env.CIRCLE_ONRAMP_API_KEY_MAINNET,
-};
-
 // Arc network the frontend is currently pointed at (see MAINNET_TODO.md
 // step 4). frontend/src/services/api.js sends this on every request.
 // KNOWN_NETWORKS/getRequestNetwork/escrowNetwork are the single place this
@@ -338,15 +327,18 @@ const ONRAMP_ENV_BY_NETWORK = {
   mainnet: {}, // production is the App Kit SDK's own default -- no override needed
 };
 
-// One App Kit server instance per network -- each Arc network has its own
-// dedicated Onramp API key (see CIRCLE_ONRAMP_API_KEY_BY_NETWORK above).
-// Created lazily (not at import time) so a missing key only breaks onramp
-// for that network, never blocks the whole server from booting, matching
-// how the rest of Circle config in this file behaves.
+// One App Kit server instance per network. Circle issues a single Standard
+// API key per environment shared across all products -- confirmed in the
+// Console, where the Onramp Kit setup page's "View" button opens the very
+// same key already used for Circle Wallets (CIRCLE_API_KEY_BY_NETWORK
+// above), not a separate dedicated one. Created lazily (not at import time)
+// so a missing key only breaks onramp for that network, never blocks the
+// whole server from booting, matching how the rest of Circle config in this
+// file behaves.
 const onrampServerByNetwork = {};
 function getOnrampServer(network) {
   if (!onrampServerByNetwork[network]) {
-    const apiKey = CIRCLE_ONRAMP_API_KEY_BY_NETWORK[network];
+    const apiKey = CIRCLE_API_KEY_BY_NETWORK[network];
     if (!apiKey) return null;
     onrampServerByNetwork[network] = createAppServerKit({
       onramp: { apiKey, referrerDomain: ONRAMP_REFERRER_DOMAIN, ...ONRAMP_ENV_BY_NETWORK[network] },
