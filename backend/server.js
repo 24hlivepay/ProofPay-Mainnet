@@ -323,8 +323,13 @@ const ONRAMP_REFERRER_DOMAIN =
 // Console "wasn't showing an Onramp option" that actually worked.
 // See https://docs.arc.io/app-kit/references/onramp-hosting-requirements
 const ONRAMP_ENV_BY_NETWORK = {
-  testnet: { baseUrl: "https://api-test.circle.com", widgetBaseUrl: "https://onramp-sandbox.arc.io" },
-  mainnet: {}, // production is the App Kit SDK's own default -- no override needed
+  // Only the API base URL differs between sandbox and production. The
+  // widget origin does not -- a real sandbox session's own widgetUrl still
+  // comes back as onramp.arc.io (confirmed live: a guessed sandbox
+  // subdomain here previously made mountIframe throw
+  // WIDGET_URL_ORIGIN_MISMATCH), so there is no widgetBaseUrl override.
+  testnet: { baseUrl: "https://api-test.circle.com" },
+  mainnet: {},
 };
 
 // One App Kit server instance per network. Circle issues a single Standard
