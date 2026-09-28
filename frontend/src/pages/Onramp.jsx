@@ -6,7 +6,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWalletWithOptions } from "../services/wallet";
 import { API_BASE_URL } from "../services/api";
-import { getNetworkConfig } from "../config/network";
+import { getCurrentNetworkId, getNetworkConfig } from "../config/network";
 
 // Buy USDC/EURC on Arc with a card, Apple Pay, Google Pay, or bank transfer,
 // delivered straight to the connected wallet. Circle's own hosted widget
@@ -15,7 +15,20 @@ import { getNetworkConfig } from "../config/network";
 // mounts the iframe. Card/Apple Pay/Google Pay additionally need this site's
 // domain registered against the account's KYB in the Circle Console; until
 // then those methods 403 inside the widget while bank transfer still works.
-const kit = new AppKit();
+//
+// Circle's Onramp sandbox and production are separate environments with
+// different widget origins; the client's widgetBaseUrl must exactly match
+// whatever the server passed to createAppServerKit() (see server.js'
+// ONRAMP_ENV_BY_NETWORK) or mountIframe throws a WIDGET_URL_ORIGIN_MISMATCH
+// error. Arc Testnet -> Circle sandbox, Arc Mainnet -> Circle production
+// (the SDK's own default, no override). Read once at module load: switching
+// ProofPay's network reloads the page (see Navbar.jsx), so this is never
+// stale for the page it's actually rendering.
+const kit = new AppKit(
+  getCurrentNetworkId() === "testnet"
+    ? { onramp: { widgetBaseUrl: "https://onramp-sandbox.arc.io" } }
+    : undefined
+);
 
 export default function Onramp() {
   const { walletSlot, walletAddress } = useWalletBadge();
