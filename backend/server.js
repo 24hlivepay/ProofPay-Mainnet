@@ -312,6 +312,21 @@ const ONRAMP_REFERRER_DOMAIN =
   hostOf(process.env.VERCEL_URL) ||
   "proofpay.online";
 
+// Circle's Onramp has two entirely separate environments -- sandbox and
+// production -- each with its own API base URL and widget origin, and an
+// API key issued for one is rejected by the other. That's a different axis
+// from Arc mainnet/testnet, but the two line up one-to-one for ProofPay: Arc
+// Testnet only ever needs test money, so it maps to Circle sandbox, and Arc
+// Mainnet maps to Circle production. Without the sandbox overrides, a
+// sandbox key silently 401s against the (default) production API -- this
+// was missing initially and is exactly why a testnet key from the Circle
+// Console "wasn't showing an Onramp option" that actually worked.
+// See https://docs.arc.io/app-kit/references/onramp-hosting-requirements
+const ONRAMP_ENV_BY_NETWORK = {
+  testnet: { baseUrl: "https://api-test.circle.com", widgetBaseUrl: "https://onramp-sandbox.arc.io" },
+  mainnet: {}, // production is the App Kit SDK's own default -- no override needed
+};
+
 // One App Kit server instance per network -- each Arc network has its own
 // Circle API key. Created lazily (not at import time) so a missing key only
 // breaks onramp for that network, never blocks the whole server from
@@ -322,7 +337,7 @@ function getOnrampServer(network) {
     const apiKey = CIRCLE_API_KEY_BY_NETWORK[network];
     if (!apiKey) return null;
     onrampServerByNetwork[network] = createAppServerKit({
-      onramp: { apiKey, referrerDomain: ONRAMP_REFERRER_DOMAIN },
+      onramp: { apiKey, referrerDomain: ONRAMP_REFERRER_DOMAIN, ...ONRAMP_ENV_BY_NETWORK[network] },
     }).onramp;
   }
   return onrampServerByNetwork[network];
