@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import axios from "axios";
 import crypto from "crypto";
+import { createAppServerKit, KitError } from "@circle-fin/app-kit/server";
 
 import express from "express";
 import cors from "cors";
@@ -297,6 +298,35 @@ const SIWE_ALLOWED_DOMAINS = [
   hostOf(process.env.VERCEL_PROJECT_PRODUCTION_URL),
   hostOf(process.env.FRONTEND_URL),
 ].filter(Boolean);
+
+// Bare hostname Circle checks the Onramp widget's parent frame against
+// (KYB's registered web_url entries). Derived from server-side env, same as
+// SIWE_ALLOWED_DOMAINS above -- never from a client-supplied header, which
+// Circle's own docs warn would let a caller widen the allowlist. Preview
+// deployments fall back to their own VERCEL_URL so the widget still loads
+// there, even though card/Apple Pay/Google Pay only work for a domain
+// actually registered in the Circle Console.
+const ONRAMP_REFERRER_DOMAIN =
+  hostOf(process.env.FRONTEND_URL) ||
+  hostOf(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+  hostOf(process.env.VERCEL_URL) ||
+  "proofpay.online";
+
+// One App Kit server instance per network -- each Arc network has its own
+// Circle API key. Created lazily (not at import time) so a missing key only
+// breaks onramp for that network, never blocks the whole server from
+// booting, matching how the rest of Circle config in this file behaves.
+const onrampServerByNetwork = {};
+function getOnrampServer(network) {
+  if (!onrampServerByNetwork[network]) {
+    const apiKey = CIRCLE_API_KEY_BY_NETWORK[network];
+    if (!apiKey) return null;
+    onrampServerByNetwork[network] = createAppServerKit({
+      onramp: { apiKey, referrerDomain: ONRAMP_REFERRER_DOMAIN },
+    }).onramp;
+  }
+  return onrampServerByNetwork[network];
+}
 
 // In-process nonce store for local-file (no DATABASE_URL) mode.
 // Vercel serverless: each cold-start gets a fresh Map; nonces that survive
@@ -2779,6 +2809,50 @@ app.get("/api/escrow-stats", async (req, res) => {
     activeBuyers,
     activeSellers,
   });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Onramp (buy USDC/EURC with fiat) — App Kit SDK
+|--------------------------------------------------------------------------
+| Server mints a short-lived Circle session for the signed-in wallet; the
+| frontend mounts Circle's own hosted widget with it. See
+| https://docs.arc.io/app-kit/onramp and .../tutorials/onramp/customize-session-minting
+| (the Express example there is followed directly).
+*/
+
+app.post("/api/onramp/sessions", requireAuth(), async (req, res) => {
+  // A signed-in wallet may only mint a session that delivers to itself --
+  // otherwise a caller could fund a purchase into a wallet they don't
+  // control, or probe the widget on someone else's behalf. Checked before
+  // anything else so it is enforced the same way regardless of which
+  // network happens to be configured.
+  const destinationAddress = String(req.body?.destinationAddress || "");
+  if (destinationAddress.toLowerCase() !== req.auth.address.toLowerCase()) {
+    return res.status(400).json({ message: "You can only buy crypto into your own connected wallet." });
+  }
+
+  const network = getRequestNetwork(req);
+  const onramp = getOnrampServer(network);
+  if (!onramp) {
+    return res.status(503).json({ message: "Buying crypto is not configured on this network yet." });
+  }
+
+  try {
+    const session = await onramp.createSession({
+      appUserId: req.auth.address.toLowerCase(),
+      destinationAddress,
+    });
+    res.setHeader("Cache-Control", "no-store");
+    return res.json(session);
+  } catch (error) {
+    if (error instanceof KitError) {
+      const statusByType = { INPUT: 400, RATE_LIMIT: 429, NETWORK: 504, SERVICE: 502, RPC: 502 };
+      return res.status(statusByType[error.type] || 500).json({ message: error.message });
+    }
+    console.error("[ProofPay] onramp session mint failed:", error?.message);
+    return res.sendStatus(500);
+  }
 });
 
 /*

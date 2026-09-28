@@ -343,8 +343,9 @@ export default function Home() {
         )}
 
         {!mode && (
-          <section className={`mx-auto mt-7 grid max-w-5xl gap-4 ${isDisputeAdmin ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+          <section className={`mx-auto mt-7 grid max-w-5xl gap-4 sm:grid-cols-2 ${isDisputeAdmin ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
             <WorkspaceCard icon="💳" title="My Wallet" description={`View balances, receive, and send supported ${getNetworkConfig().chainName} tokens.`} onClick={() => navigate("/wallet")} />
+            <WorkspaceCard icon="💵" title="Buy USDC / EURC" description="Fund your wallet with a card, Apple Pay, Google Pay, or bank transfer." onClick={() => navigate("/onramp")} />
             {isDisputeAdmin ? (
               <WorkspaceCard icon="🛡️" title="Admin Disputes" description="Review evidence from both sides and settle disputed escrows on-chain." badge={openDisputeCount} onClick={() => navigate("/admin/disputes")} />
             ) : (

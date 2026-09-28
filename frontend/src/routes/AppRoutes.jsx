@@ -26,6 +26,7 @@ import AdminDisputes from "../pages/AdminDisputes";
 import AdminLogin from "../pages/AdminLogin";
 import AdminEscrows from "../pages/AdminEscrows";
 import AdminAuditLog from "../pages/AdminAuditLog";
+import Onramp from "../pages/Onramp";
 import AdminContracts from "../pages/AdminContracts";
 import OrderHistory from "../pages/OrderHistory";
 import Profile from "../pages/Profile";
@@ -115,6 +116,7 @@ export default function AppRoutes() {
       <Route path="/admin/disputes" element={<AdminDisputes />} />
       <Route path="/admin/escrows" element={<AdminEscrows />} />
       <Route path="/admin/audit-log" element={<AdminAuditLog />} />
+      <Route path="/onramp" element={<Onramp />} />
       <Route path="/admin/contracts" element={<AdminContracts />} />
 
       {/* Seller */}
