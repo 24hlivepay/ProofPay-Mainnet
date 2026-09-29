@@ -165,8 +165,12 @@ export default function Swap() {
     if (raw <= 0) return;
     // tokenIn === the native asset means gas for this very swap is paid out
     // of the same balance -- reserve a small buffer so "Max" doesn't leave
-    // nothing to pay the transaction fee with.
-    const reserve = getSwapTokenInfo(tokenIn, network.id).isNative ? 0.5 : 0;
+    // nothing to pay the transaction fee with. Real observed gas on Arc is
+    // a few cents (0.02-0.05 USDC); a flat 0.5 reserve zeroed out Max on a
+    // real 0.16 USDC balance. Cap the reserve at half the balance so a
+    // small balance still gets a usable (non-zero) Max instead of 0.
+    const isNative = getSwapTokenInfo(tokenIn, network.id).isNative;
+    const reserve = isNative ? Math.min(0.05, raw / 2) : 0;
     const max = Math.max(raw - reserve, 0);
     setAmountIn(String(max));
     setEstimate(null);
