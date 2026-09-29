@@ -2,6 +2,8 @@ import dotenv from "dotenv";
 import axios from "axios";
 import crypto from "crypto";
 import { createAppServerKit, KitError } from "@circle-fin/app-kit/server";
+import { AppKit } from "@circle-fin/app-kit";
+import { createCircleUserWalletAdapter } from "@circle-fin/adapter-circle-wallets/ucw/server";
 
 import express from "express";
 import cors from "cors";
@@ -1175,6 +1177,165 @@ app.post("/api/circle/transfer", async (req, res) => {
       error: error.response?.data || error.message,
     });
   }
+});
+
+// ── Swap for Circle (email-login) wallets ────────────────────────────────
+// EOA wallets (frontend/src/pages/Swap.jsx) call the App Kit SDK directly
+// in the browser and sign with a normal wallet popup. A Circle wallet can't:
+// its PIN approval only exists as a challengeId + the W3S browser SDK, and
+// kit.swap() with the user-controlled adapter blocks for the whole approval
+// instead of returning a challengeId immediately the way /circle/transfer's
+// raw REST call does. So the swap runs as a background job here -- the
+// adapter's own onChallenge fires as soon as one is needed, this stores it
+// for the client to poll and hand to the existing executeCircleChallenge()
+// (already used for transfers), and the adapter's own internal Circle
+// polling resumes kit.swap() once that challenge is approved. No new
+// polling logic needed on either side beyond exposing this job's state.
+const circleSwapJobs = new Map(); // jobId -> { status, challengeId, result, error, createdAt }
+const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
+
+function pruneCircleSwapJobs() {
+  const cutoff = Date.now() - CIRCLE_SWAP_JOB_TTL_MS;
+  for (const [jobId, job] of circleSwapJobs) {
+    if (job.createdAt < cutoff) circleSwapJobs.delete(jobId);
+  }
+}
+
+const swapKit = new AppKit();
+
+function swapChain(network) {
+  return network === "mainnet" ? "Arc" : "Arc_Testnet";
+}
+
+app.post("/api/swap/circle/estimate", async (req, res) => {
+  const userToken = getCircleUserToken(req, res);
+  if (!userToken) return;
+
+  const { walletId, walletAddress, tokenIn, tokenOut, amountIn } = req.body || {};
+  if (
+    !walletId ||
+    !/^0x[a-fA-F0-9]{40}$/.test(walletAddress || "") ||
+    !tokenIn ||
+    !tokenOut ||
+    !amountIn ||
+    Number(amountIn) <= 0
+  ) {
+    return res.status(400).json({ message: "A valid wallet, token pair, and amount are required." });
+  }
+
+  const network = getRequestNetwork(req);
+  const apiKey = CIRCLE_API_KEY_BY_NETWORK[network];
+  if (!apiKey) {
+    return res.status(503).json({ message: "Swap is not configured on this network yet." });
+  }
+
+  try {
+    // Read-only: no funds move and no challenge is expected here, so this
+    // resolves synchronously like any other estimate call.
+    const adapter = await createCircleUserWalletAdapter({
+      apiKey,
+      userToken,
+      walletId,
+      walletAddress,
+      chain: swapChain(network),
+      accountType: "SCA",
+    });
+    const estimate = await swapKit.estimateSwap({
+      from: { adapter, chain: swapChain(network) },
+      tokenIn,
+      tokenOut,
+      amountIn: String(amountIn),
+      config: { allowanceStrategy: "approve" },
+    });
+    return res.json(estimate);
+  } catch (error) {
+    if (error instanceof KitError) {
+      return res.status(400).json({ message: error.message });
+    }
+    console.error("[ProofPay] Circle swap estimate failed:", error?.message);
+    return res.status(500).json({ message: "Could not get a quote for this swap." });
+  }
+});
+
+app.post("/api/swap/circle", async (req, res) => {
+  const userToken = getCircleUserToken(req, res);
+  if (!userToken) return;
+
+  const { walletId, walletAddress, tokenIn, tokenOut, amountIn } = req.body || {};
+  if (
+    !walletId ||
+    !/^0x[a-fA-F0-9]{40}$/.test(walletAddress || "") ||
+    !tokenIn ||
+    !tokenOut ||
+    !amountIn ||
+    Number(amountIn) <= 0
+  ) {
+    return res.status(400).json({ message: "A valid wallet, token pair, and amount are required." });
+  }
+
+  const network = getRequestNetwork(req);
+  const apiKey = CIRCLE_API_KEY_BY_NETWORK[network];
+  if (!apiKey) {
+    return res.status(503).json({ message: "Swap is not configured on this network yet." });
+  }
+
+  pruneCircleSwapJobs();
+  const jobId = crypto.randomUUID();
+  circleSwapJobs.set(jobId, { status: "pending", challengeId: null, result: null, error: null, createdAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  try {
+    const adapter = await createCircleUserWalletAdapter({
+      apiKey,
+      userToken,
+      walletId,
+      walletAddress,
+      chain: swapChain(network),
+      accountType: "SCA",
+      onChallenge: ({ challengeId }) => {
+        const job = circleSwapJobs.get(jobId);
+        if (job) {
+          job.challengeId = challengeId;
+          job.status = "awaiting-approval";
+        }
+      },
+    });
+    const result = await swapKit.swap({
+      from: { adapter, chain: swapChain(network) },
+      tokenIn,
+      tokenOut,
+      amountIn: String(amountIn),
+      config: { allowanceStrategy: "approve" },
+    });
+    const job = circleSwapJobs.get(jobId);
+    if (job) {
+      job.status = "done";
+      job.result = { transactionHash: result?.transactionHash || result?.hash || null };
+    }
+  } catch (error) {
+    const job = circleSwapJobs.get(jobId);
+    if (job) {
+      job.status = "error";
+      job.error =
+        error instanceof KitError ? error.message : error?.message || "The swap did not go through.";
+    }
+    if (!(error instanceof KitError)) {
+      console.error("[ProofPay] Circle swap job failed:", error?.message);
+    }
+  }
+});
+
+app.get("/api/swap/circle/:jobId", (req, res) => {
+  const job = circleSwapJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ message: "Swap job not found or expired." });
+  }
+  return res.json({
+    status: job.status,
+    challengeId: job.challengeId,
+    result: job.result,
+    error: job.error,
+  });
 });
 
 app.get("/api/circle/wallets/:walletId/balances", async (req, res) => {
