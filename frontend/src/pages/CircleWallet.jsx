@@ -14,7 +14,6 @@ import {
 } from "../services/wallet";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
-import { getEscrowAssets } from "../config/escrowAssets";
 import { getCurrentNetworkId, getExplorerTxUrl, getNetworkConfig } from "../config/network";
 import { shortenAddress } from "../utils/address";
 
@@ -24,15 +23,26 @@ const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
 ];
 
-function getWalletTokens() {
-  return getEscrowAssets()
-    .filter((asset) => asset.symbol !== "USDC")
-    .map((asset) => ({
-      id: `arc-${asset.symbol.toLowerCase()}`,
-      symbol: asset.symbol,
-      name: asset.name,
-      tokenAddress: asset.tokenAddress,
-      decimals: asset.decimals,
+// Every ERC20 the connected wallet actually holds on Arc, not just the
+// handful ProofPay's escrow contracts know about (USDC/EURC) -- so a token
+// acquired elsewhere, like cirBTC from Swap, still shows up here. Response
+// shape (token.address_hash, token.decimals, value as a raw units string)
+// confirmed against a real holder address on explorer.arc.io before relying
+// on it, not assumed from Blockscout's general docs.
+async function fetchHeldTokens(address, explorerBase) {
+  const response = await fetch(`${explorerBase}/api/v2/addresses/${address}/token-balances`);
+  if (!response.ok) return [];
+  const balances = await response.json();
+
+  return balances
+    .filter((entry) => entry.token?.type === "ERC-20" && Number(entry.value) > 0)
+    .map((entry) => ({
+      id: `arc-${entry.token.address_hash.toLowerCase()}`,
+      symbol: entry.token.symbol,
+      name: entry.token.name,
+      tokenAddress: entry.token.address_hash,
+      decimals: Number(entry.token.decimals),
+      rawValue: entry.value,
     }));
 }
 
@@ -68,14 +78,11 @@ export default function CircleWallet() {
     try {
       setBalanceLoading(true);
       if (!isCircleWallet) {
-        const walletTokens = getWalletTokens();
-        const { provider } = await connectWallet();
-        const [nativeBalance, ...tokenBalances] = await Promise.all([
-          provider.getBalance(address),
-          ...walletTokens.map((token) =>
-            new Contract(token.tokenAddress, ERC20_ABI, provider).balanceOf(address)
-          ),
+        const [{ provider }, heldTokens] = await Promise.all([
+          connectWallet(),
+          fetchHeldTokens(address, getNetworkConfig().explorerBase),
         ]);
+        const nativeBalance = await provider.getBalance(address);
         const nextAssets = [{
           token: {
             id: "arc-native-usdc",
@@ -86,13 +93,13 @@ export default function CircleWallet() {
             standard: "NATIVE",
           },
           amount: formatUnits(nativeBalance, 18),
-        }, ...walletTokens.map((token, index) => ({
+        }, ...heldTokens.map((token) => ({
           token: {
             ...token,
             isNative: false,
             standard: "ERC20",
           },
-          amount: formatUnits(tokenBalances[index], token.decimals),
+          amount: formatUnits(token.rawValue, token.decimals),
         }))].filter((asset) => Number(asset.amount || 0) > 0);
         setAssets(nextAssets);
         setActivity([]);
