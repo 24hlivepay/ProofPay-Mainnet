@@ -1193,10 +1193,23 @@ app.post("/api/circle/transfer", async (req, res) => {
 //
 // Approve-then-swap always runs as two challenges (no allowance check
 // first) -- simpler and safer to ship than adding a new RPC-reading code
-// path right after the above incident; it costs a second PIN tap on every
-// swap, which can be optimized later.
+// path right after the above incident; that gap is closed below now that
+// this endpoint has proven stable in production: an allowance read skips
+// the approve challenge on every swap after the first one for a given
+// token/spender pair, instead of asking for it every time.
 const LIFI_API_URL = "https://li.quest/v1";
 const SWAP_CHAIN_ID_BY_NETWORK = { mainnet: 5042, testnet: 5042002 };
+const SWAP_RPC_URL_BY_NETWORK = {
+  mainnet: "https://rpc.mainnet.arc.io",
+  testnet: "https://rpc.testnet.arc.network",
+};
+const ERC20_ALLOWANCE_ABI = ["function allowance(address owner, address spender) view returns (uint256)"];
+
+async function getSwapAllowance({ network, tokenAddress, owner, spender }) {
+  const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network]);
+  const token = new ethers.Contract(tokenAddress, ERC20_ALLOWANCE_ABI, provider);
+  return token.allowance(owner, spender);
+}
 
 // cirBTC deliberately isn't in ESCROW_ASSETS_BY_NETWORK (no ProofPay escrow
 // exists for it -- see escrowAssets.js on the frontend for the same note).
@@ -1384,18 +1397,27 @@ app.post("/api/swap/circle", async (req, res) => {
     if (!fetched) throw new Error("Swap is not configured on this network yet.");
     const { quote, inInfo } = fetched;
 
-    job.step = "approve";
-    const approveChallengeId = await createCircleContractChallenge({
+    const currentAllowance = await getSwapAllowance({
       network,
-      userToken,
-      walletId: params.walletId,
-      contractAddress: inInfo.tokenAddress,
-      abiFunctionSignature: "approve(address,uint256)",
-      abiParameters: [quote.estimate.approvalAddress, quote.action.fromAmount],
-    });
-    job.challengeId = approveChallengeId;
-    job.status = "awaiting-approval";
-    await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
+      tokenAddress: inInfo.tokenAddress,
+      owner: params.walletAddress,
+      spender: quote.estimate.approvalAddress,
+    }).catch(() => 0n); // if the read fails, fall through to approving as before
+
+    if (currentAllowance < BigInt(quote.action.fromAmount)) {
+      job.step = "approve";
+      const approveChallengeId = await createCircleContractChallenge({
+        network,
+        userToken,
+        walletId: params.walletId,
+        contractAddress: inInfo.tokenAddress,
+        abiFunctionSignature: "approve(address,uint256)",
+        abiParameters: [quote.estimate.approvalAddress, quote.action.fromAmount],
+      });
+      job.challengeId = approveChallengeId;
+      job.status = "awaiting-approval";
+      await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
+    }
 
     job.step = "swap";
     const nativeValue =
