@@ -90,6 +90,15 @@ async function getWalletProvider(walletType) {
   return exactProvider || getInjectedWallet(walletType);
 }
 
+// Resolves the raw EIP-1193 provider for whichever wallet is currently
+// connected (from proofpay-wallet-type), for features that need to hand it
+// to another SDK directly (e.g. App Kit's Viem adapter for Swap) rather
+// than go through ethers' BrowserProvider wrapper.
+export async function getCurrentWalletProvider() {
+  const walletType = localStorage.getItem("proofpay-wallet-type") || "metamask";
+  return getWalletProvider(walletType);
+}
+
 // The label for a wallet the user picked from the dynamic
 // discoverInjectedWallets() list (anything not in WALLET_DETAILS) is only
 // known at connect time, from its own EIP-6963 announcement -- cached here
