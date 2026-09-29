@@ -6,23 +6,19 @@ import { Contract, formatUnits } from "ethers";
 import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
-import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
-import { executeCircleChallenge } from "../circle/circleConfig";
+import { connectWallet, getCurrentWalletProvider } from "../services/wallet";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { getNetworkConfig } from "../config/network";
-import api from "../services/api";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
-// Swap is an App Kit SDK capability (same package Onramp already uses).
-// EOA wallets (MetaMask, Rabby, etc.) run it entirely client-side -- the
+// Swap is an App Kit SDK capability (same package Onramp already uses),
+// not a separate SDK: no server involvement for an EOA wallet -- the
 // connected wallet's own provider becomes a Viem adapter and signs the
-// swap directly, exactly like any other DEX frontend. Circle wallets
-// (email sign-in) can't sign through a browser-injected provider, so their
-// swap runs server-side as a background job (see POST /api/swap/circle in
-// server.js) while this page polls for a PIN-approval challengeId and hands
-// it to executeCircleChallenge() -- the same Web SDK call already used for
-// transfers/contract-execution.
+// swap directly, exactly like any other DEX frontend. Circle Wallets
+// (email sign-in) need a different, server-mediated flow because their PIN
+// approval can't happen through a browser-injected signer; that path isn't
+// built yet, so this page (and its dashboard entry) is EOA-only for now.
 //
 // On Arc, Swap accepts USDC, EURC, and cirBTC (see
 // https://docs.arc.io/app-kit/swap) -- the actual swap call just takes
@@ -103,27 +99,9 @@ export default function Swap() {
   }
 
   async function loadBalances() {
-    if (!walletAddress) return;
+    if (isCircleWallet || !walletAddress) return;
     try {
       setBalancesLoading(true);
-
-      if (isCircleWallet) {
-        const session = getWalletSession();
-        const auth = getCircleAuthSession();
-        if (!session?.walletId || !auth?.userToken) return;
-        const response = await api.get(`/circle/wallets/${session.walletId}/balances`, {
-          headers: { "X-User-Token": auth.userToken },
-        });
-        const tokenBalances = response.data.data?.tokenBalances || [];
-        const next = {};
-        for (const symbol of SWAP_TOKENS) {
-          const match = tokenBalances.find((item) => item?.token?.symbol === symbol);
-          if (match) next[symbol] = match.amount;
-        }
-        setBalances(next);
-        return;
-      }
-
       const { address, provider } = await connectWallet();
       const next = {};
       for (const symbol of SWAP_TOKENS) {
@@ -211,23 +189,6 @@ export default function Swap() {
     try {
       setStatus("estimating");
       setMessage("");
-
-      if (isCircleWallet) {
-        const session = getWalletSession();
-        const auth = getCircleAuthSession();
-        if (!session?.walletId || !auth?.userToken) {
-          throw new Error("Your Circle wallet session has expired. Sign in with email again.");
-        }
-        const response = await api.post(
-          "/swap/circle/estimate",
-          { walletId: session.walletId, walletAddress: session.address, tokenIn, tokenOut, amountIn },
-          { headers: { "X-User-Token": auth.userToken } }
-        );
-        setEstimate(response.data);
-        setStatus("ready");
-        return;
-      }
-
       const adapter = await buildAdapter();
       const result = await kit.estimateSwap(buildSwapParams(adapter));
       setEstimate(result);
@@ -246,7 +207,7 @@ export default function Swap() {
   // normal swap app works -- no separate "Get quote" step. Re-runs whenever
   // the amount or either token changes.
   useEffect(() => {
-    if (!amountIn || Number(amountIn) <= 0 || !walletAddress) {
+    if (!amountIn || Number(amountIn) <= 0 || isCircleWallet || !walletAddress) {
       setEstimate(null);
       if (status !== "swapping" && status !== "done") setStatus("idle");
       return undefined;
@@ -259,74 +220,10 @@ export default function Swap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amountIn, tokenIn, tokenOut, walletAddress, isCircleWallet]);
 
-  async function confirmCircleSwap() {
-    const session = getWalletSession();
-    const auth = getCircleAuthSession();
-    if (!session?.walletId || !auth?.userToken) {
-      throw new Error("Your Circle wallet session has expired. Sign in with email again.");
-    }
-
-    const startResponse = await api.post(
-      "/swap/circle",
-      { walletId: session.walletId, walletAddress: session.address, tokenIn, tokenOut, amountIn },
-      { headers: { "X-User-Token": auth.userToken } }
-    );
-    const jobId = startResponse.data.jobId;
-
-    let challengeHandled = false;
-    // The backend job runs independently of this poll loop -- its own
-    // onChallenge fires as soon as PIN approval is needed, and Circle's own
-    // polling (inside the adapter, server-side) resumes the swap once that
-    // challenge is approved. This loop only needs to notice the challengeId
-    // once and hand it to the Web SDK; it keeps polling afterward purely to
-    // learn the final outcome.
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const poll = await api.get(`/swap/circle/${jobId}`, {
-        headers: { "X-User-Token": auth.userToken },
-      });
-      const job = poll.data;
-
-      if (job.status === "awaiting-approval" && job.challengeId && !challengeHandled) {
-        challengeHandled = true;
-        setMessage("Approve this swap with your PIN...");
-        await executeCircleChallenge({
-          challengeId: job.challengeId,
-          userToken: auth.userToken,
-          encryptionKey: auth.encryptionKey,
-          display: {
-            title: "Swap",
-            subtitle: `Swap ${amountIn} ${tokenIn} for ${tokenOut} on ${network.chainName}.`,
-            amount: amountIn,
-            symbol: tokenIn,
-            confirmLabel: `Swap ${amountIn} ${tokenIn}`,
-            action: "Swap",
-          },
-        });
-        setMessage("Finishing your swap...");
-      }
-
-      if (job.status === "done") return job.result;
-      if (job.status === "error") throw new Error(job.error);
-
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    }
-
-    throw new Error("The swap is still processing. Check your wallet activity before retrying.");
-  }
-
   async function confirmSwap() {
     try {
       setStatus("swapping");
       setMessage("");
-
-      if (isCircleWallet) {
-        const result = await confirmCircleSwap();
-        setTxHash(result?.transactionHash || "");
-        setStatus("done");
-        loadBalances();
-        return;
-      }
-
       const adapter = await buildAdapter();
       const result = await kit.swap(buildSwapParams(adapter));
       setTxHash(result?.transactionHash || result?.hash || "");
@@ -359,6 +256,11 @@ export default function Swap() {
           {!walletAddress ? (
             <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
               Connect your wallet first, then come back to this page.
+            </p>
+          ) : isCircleWallet ? (
+            <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
+              Swap isn't available for Circle email wallets yet -- it currently works with a
+              connected wallet extension (MetaMask, Rabby, and others).
             </p>
           ) : (
             <div className="mt-6 space-y-4">
@@ -473,7 +375,7 @@ export default function Swap() {
               )}
 
               {status === "swapping" ? (
-                <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
+                <PrimaryButton disabled>Waiting for your wallet...</PrimaryButton>
               ) : (
                 <PrimaryButton
                   onClick={confirmSwap}

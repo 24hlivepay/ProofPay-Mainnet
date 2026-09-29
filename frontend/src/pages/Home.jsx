@@ -381,10 +381,12 @@ export default function Home() {
             </div>
 
             {activeGroup === "wallet" && (
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${isCircleWallet ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
                 <WorkspaceCard icon="💳" title="My Wallet" description={`View balances, receive, and send supported ${getNetworkConfig().chainName} tokens.`} onClick={() => navigate("/wallet")} />
                 <WorkspaceCard icon="💵" title="Onramp — Buy Crypto" description="Fund your wallet with a card, Apple Pay, Google Pay, or bank transfer." onClick={() => navigate("/onramp")} />
-                <WorkspaceCard icon="🔄" title="Swap" description="Exchange USDC and EURC directly from your connected wallet." onClick={() => navigate("/swap")} />
+                {!isCircleWallet && (
+                  <WorkspaceCard icon="🔄" title="Swap" description="Exchange USDC and EURC directly from your connected wallet." onClick={() => navigate("/swap")} />
+                )}
               </div>
             )}
 
