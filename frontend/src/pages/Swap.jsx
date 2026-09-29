@@ -132,7 +132,11 @@ export default function Swap() {
   }
 
   async function getEstimate() {
-    if (!amountIn || Number(amountIn) <= 0) return;
+    if (!amountIn || Number(amountIn) <= 0) {
+      setEstimate(null);
+      setStatus("idle");
+      return;
+    }
 
     try {
       setStatus("estimating");
@@ -155,6 +159,23 @@ export default function Swap() {
       );
     }
   }
+
+  // Quote refreshes automatically as the user types (debounced), the way a
+  // normal swap app works -- no separate "Get quote" step. Re-runs whenever
+  // the amount or either token changes.
+  useEffect(() => {
+    if (!amountIn || Number(amountIn) <= 0 || isCircleWallet || !walletAddress) {
+      setEstimate(null);
+      if (status !== "swapping" && status !== "done") setStatus("idle");
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      getEstimate();
+    }, 500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amountIn, tokenIn, tokenOut, walletAddress, isCircleWallet]);
 
   async function confirmSwap() {
     try {
@@ -296,23 +317,27 @@ export default function Swap() {
                 </div>
               </div>
 
-              {estimate?.fees?.length > 0 && (
-                <p className="text-xs text-slate-500">
-                  Fees: {estimate.fees.map((fee) => `${fee.amount} ${fee.token} (${fee.type})`).join(", ")}
-                </p>
+              {estimate && (
+                <div className="space-y-1 text-xs text-slate-500">
+                  {estimate.stopLimit && (
+                    <p>Minimum received: {estimate.stopLimit.amount} {estimate.stopLimit.token}</p>
+                  )}
+                  {estimate.fees?.length > 0 && (
+                    <p>Fees: {estimate.fees.map((fee) => `${fee.amount} ${fee.token} (${fee.type})`).join(", ")}</p>
+                  )}
+                </div>
               )}
 
-              {status === "idle" || status === "estimating" ? (
-                <PrimaryButton onClick={getEstimate} disabled={status === "estimating" || !amountIn}>
-                  {status === "estimating" ? "Getting quote..." : "Get quote"}
-                </PrimaryButton>
-              ) : status === "ready" ? (
-                <PrimaryButton onClick={confirmSwap}>
-                  Confirm swap in your wallet
-                </PrimaryButton>
-              ) : status === "swapping" ? (
+              {status === "swapping" ? (
                 <PrimaryButton disabled>Waiting for your wallet...</PrimaryButton>
-              ) : null}
+              ) : (
+                <PrimaryButton
+                  onClick={confirmSwap}
+                  disabled={status !== "ready"}
+                >
+                  {status === "estimating" ? "Getting quote..." : !amountIn ? "Enter an amount" : "Swap"}
+                </PrimaryButton>
+              )}
 
               {status === "error" && (
                 <div>
