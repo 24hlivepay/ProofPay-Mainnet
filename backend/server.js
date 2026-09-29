@@ -1177,6 +1177,268 @@ app.post("/api/circle/transfer", async (req, res) => {
   }
 });
 
+// ── Swap for Circle (email-login) wallets ────────────────────────────────
+// EOA wallets (frontend/src/pages/Swap.jsx) call the App Kit SDK directly in
+// the browser. A first attempt did the same for Circle wallets server-side
+// via @circle-fin/adapter-circle-wallets -- that package hard-depends on
+// @solana/web3.js (Circle's App Kit supports Solana too), a ~38MB transitive
+// dependency ProofPay never needs, and it crashed the entire Vercel
+// function on deploy (every endpoint, not just this one, started returning
+// FUNCTION_INVOCATION_FAILED). This version calls LI.FI's own public quote
+// API directly (confirmed live: it's the same aggregator App Kit's swap
+// routes through under the hood -- a real quote here returned
+// route.tool: "fly", matching what a real EOA swap's network request showed
+// earlier) and executes with the existing lightweight Circle REST calls
+// already used for transfers, adding no new dependency at all.
+//
+// Approve-then-swap always runs as two challenges (no allowance check
+// first) -- simpler and safer to ship than adding a new RPC-reading code
+// path right after the above incident; it costs a second PIN tap on every
+// swap, which can be optimized later.
+const LIFI_API_URL = "https://li.quest/v1";
+const SWAP_CHAIN_ID_BY_NETWORK = { mainnet: 5042, testnet: 5042002 };
+
+// cirBTC deliberately isn't in ESCROW_ASSETS_BY_NETWORK (no ProofPay escrow
+// exists for it -- see escrowAssets.js on the frontend for the same note).
+// Addresses match frontend/src/pages/Swap.jsx's CIRBTC_INFO, verified
+// against explorer.arc.io / explorer.testnet.arc.io.
+const CIRBTC_BY_NETWORK = {
+  mainnet: { tokenAddress: "0x171A4217b86A807A64eB94757Db6849fb4bDbAA0", decimals: 8 },
+  testnet: { tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF", decimals: 8 },
+};
+
+function getSwapTokenInfo(symbol, network) {
+  if (symbol === "cirBTC") return CIRBTC_BY_NETWORK[network];
+  const asset = getEscrowAssets(network).get(symbol);
+  return asset ? { tokenAddress: asset.tokenAddress, decimals: asset.decimals } : null;
+}
+
+async function fetchLifiQuote({ network, tokenIn, tokenOut, amountIn, fromAddress }) {
+  const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
+  const inInfo = getSwapTokenInfo(tokenIn, network);
+  const outInfo = getSwapTokenInfo(tokenOut, network);
+  if (!chainId || !inInfo || !outInfo) return null;
+
+  const response = await axios.get(`${LIFI_API_URL}/quote`, {
+    params: {
+      fromChain: chainId,
+      toChain: chainId,
+      fromToken: inInfo.tokenAddress,
+      toToken: outInfo.tokenAddress,
+      fromAmount: ethers.parseUnits(String(amountIn), inInfo.decimals).toString(),
+      fromAddress,
+    },
+  });
+  return { quote: response.data, inInfo, outInfo };
+}
+
+function formatLifiEstimate(quote, tokenIn, tokenOut, inInfo, outInfo) {
+  const feeCosts = quote.estimate.feeCosts || [];
+  const gasCosts = quote.estimate.gasCosts || [];
+  return {
+    tokenIn,
+    tokenOut,
+    estimatedOutput: { amount: ethers.formatUnits(quote.estimate.toAmount, outInfo.decimals), token: tokenOut },
+    stopLimit: { amount: ethers.formatUnits(quote.estimate.toAmountMin, outInfo.decimals), token: tokenOut },
+    fees: [
+      ...feeCosts.map((fee) => ({
+        amount: ethers.formatUnits(fee.amount, fee.token.decimals),
+        token: fee.token.symbol,
+        type: "provider",
+      })),
+      ...gasCosts.map((gas) => ({
+        amount: ethers.formatUnits(gas.amount, gas.token.decimals),
+        token: gas.token.symbol,
+        type: "gas",
+      })),
+    ],
+  };
+}
+
+function validateSwapRequestBody(body, network) {
+  const { walletId, walletAddress, tokenIn, tokenOut, amountIn } = body || {};
+  const validTokens = new Set(["USDC", "EURC", "cirBTC"]);
+  if (
+    !walletId ||
+    !/^0x[a-fA-F0-9]{40}$/.test(walletAddress || "") ||
+    !validTokens.has(tokenIn) ||
+    !validTokens.has(tokenOut) ||
+    tokenIn === tokenOut ||
+    !amountIn ||
+    Number(amountIn) <= 0 ||
+    !SWAP_CHAIN_ID_BY_NETWORK[network]
+  ) {
+    return null;
+  }
+  return { walletId, walletAddress, tokenIn, tokenOut, amountIn };
+}
+
+app.post("/api/swap/circle/estimate", async (req, res) => {
+  const userToken = getCircleUserToken(req, res);
+  if (!userToken) return;
+
+  const network = getRequestNetwork(req);
+  const params = validateSwapRequestBody(req.body, network);
+  if (!params) {
+    return res.status(400).json({ message: "A valid wallet, token pair, and amount are required." });
+  }
+
+  try {
+    const fetched = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
+    if (!fetched) {
+      return res.status(503).json({ message: "Swap is not configured on this network yet." });
+    }
+    return res.json(formatLifiEstimate(fetched.quote, params.tokenIn, params.tokenOut, fetched.inInfo, fetched.outInfo));
+  } catch (error) {
+    console.error("[ProofPay] LI.FI quote failed:", error.response?.data || error.message);
+    return res.status(error.response?.status || 500).json({
+      message: error.response?.data?.message || "Could not get a quote for this swap.",
+    });
+  }
+});
+
+const CIRCLE_CHALLENGE_SUCCESS = new Set(["COMPLETE", "CONFIRMED"]);
+const CIRCLE_CHALLENGE_FAILURE = new Set(["CANCELLED", "DENIED", "FAILED", "EXPIRED"]);
+
+async function createCircleContractChallenge({ network, userToken, walletId, contractAddress, abiFunctionSignature, abiParameters, callData, amount }) {
+  const response = await axios.post(
+    `${CIRCLE_API_URL}/v1/w3s/user/transactions/contractExecution`,
+    {
+      idempotencyKey: crypto.randomUUID(),
+      walletId,
+      contractAddress,
+      ...(callData ? { callData } : { abiFunctionSignature, abiParameters }),
+      ...(amount ? { amount } : {}),
+      feeLevel: "MEDIUM",
+    },
+    { headers: { ...getCircleHeaders(network), "X-User-Token": userToken } }
+  );
+  return response.data.data.challengeId;
+}
+
+// Waits out a single challenge: polls until the owner approves/denies it via
+// the Web SDK (see executeCircleChallenge() in circleConfig.js, called from
+// the client once it sees this challengeId through the job poll below),
+// then returns the resulting on-chain transaction hash.
+async function waitForCircleChallenge({ network, userToken, challengeId }) {
+  let transactionId = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/user/challenges/${challengeId}`, {
+      headers: { ...getCircleHeaders(network), "X-User-Token": userToken },
+    });
+    const challenge = response.data.data?.challenge;
+    transactionId = challenge?.correlationIds?.[0] || transactionId;
+    if (transactionId) break;
+    if (CIRCLE_CHALLENGE_FAILURE.has(challenge?.status)) {
+      throw new Error(challenge.errorMessage || `Approval ended with status: ${challenge.status}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  if (!transactionId) throw new Error("Approval is taking longer than expected. Check your wallet activity.");
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/transactions/${transactionId}`, {
+      headers: { ...getCircleHeaders(network), "X-User-Token": userToken },
+    });
+    const transaction = response.data.data?.transaction;
+    if (CIRCLE_CHALLENGE_SUCCESS.has(transaction?.state) && transaction?.txHash) {
+      return transaction.txHash;
+    }
+    if (CIRCLE_CHALLENGE_FAILURE.has(transaction?.state)) {
+      throw new Error(transaction.errorReason || `Transaction ended with status: ${transaction.state}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  throw new Error("The transaction is still processing. Check your wallet activity before retrying.");
+}
+
+const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, createdAt }
+const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
+
+function pruneCircleSwapJobs() {
+  const cutoff = Date.now() - CIRCLE_SWAP_JOB_TTL_MS;
+  for (const [jobId, job] of circleSwapJobs) {
+    if (job.createdAt < cutoff) circleSwapJobs.delete(jobId);
+  }
+}
+
+app.post("/api/swap/circle", async (req, res) => {
+  const userToken = getCircleUserToken(req, res);
+  if (!userToken) return;
+
+  const network = getRequestNetwork(req);
+  const params = validateSwapRequestBody(req.body, network);
+  if (!params) {
+    return res.status(400).json({ message: "A valid wallet, token pair, and amount are required." });
+  }
+
+  pruneCircleSwapJobs();
+  const jobId = crypto.randomUUID();
+  circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, createdAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  const job = circleSwapJobs.get(jobId);
+
+  try {
+    const fetched = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
+    if (!fetched) throw new Error("Swap is not configured on this network yet.");
+    const { quote, inInfo } = fetched;
+
+    job.step = "approve";
+    const approveChallengeId = await createCircleContractChallenge({
+      network,
+      userToken,
+      walletId: params.walletId,
+      contractAddress: inInfo.tokenAddress,
+      abiFunctionSignature: "approve(address,uint256)",
+      abiParameters: [quote.estimate.approvalAddress, quote.action.fromAmount],
+    });
+    job.challengeId = approveChallengeId;
+    job.status = "awaiting-approval";
+    await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
+
+    job.step = "swap";
+    const nativeValue =
+      quote.transactionRequest.value && quote.transactionRequest.value !== "0x0"
+        ? ethers.formatUnits(BigInt(quote.transactionRequest.value), 18)
+        : null;
+    const swapChallengeId = await createCircleContractChallenge({
+      network,
+      userToken,
+      walletId: params.walletId,
+      contractAddress: quote.transactionRequest.to,
+      callData: quote.transactionRequest.data,
+      amount: nativeValue,
+    });
+    job.challengeId = swapChallengeId;
+    job.status = "awaiting-approval";
+    const txHash = await waitForCircleChallenge({ network, userToken, challengeId: swapChallengeId });
+
+    job.status = "done";
+    job.result = { transactionHash: txHash };
+  } catch (error) {
+    job.status = "error";
+    job.error = error.response?.data?.message || error.message || "The swap did not go through.";
+    if (!error.response) {
+      console.error("[ProofPay] Circle swap job failed:", error.message);
+    }
+  }
+});
+
+app.get("/api/swap/circle/:jobId", (req, res) => {
+  const job = circleSwapJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ message: "Swap job not found or expired." });
+  }
+  return res.json({
+    status: job.status,
+    step: job.step,
+    challengeId: job.challengeId,
+    result: job.result,
+    error: job.error,
+  });
+});
+
 app.get("/api/circle/wallets/:walletId/balances", async (req, res) => {
   const userToken = getCircleUserToken(req, res);
   if (!userToken) return;
