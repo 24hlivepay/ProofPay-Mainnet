@@ -10,6 +10,7 @@ import {
   getCircleAuthSession,
   getConnectedWallet,
   getWalletSession,
+  WALLET_DETAILS,
 } from "../services/wallet";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
@@ -45,12 +46,9 @@ export default function CircleWallet() {
   const address = isCircleWallet
     ? session?.address || ""
     : session?.address || getConnectedWallet() || "";
-  const walletLabel =
-    walletType === "rabby"
-      ? "Rabby Wallet"
-      : isCircleWallet
-        ? "Circle Wallet"
-        : "MetaMask";
+  const walletLabel = isCircleWallet
+    ? "Circle Wallet"
+    : WALLET_DETAILS[walletType]?.label || "MetaMask";
   const [view, setView] = useState(location.state?.view || "overview");
   const [assets, setAssets] = useState([]);
   const [activity, setActivity] = useState([]);

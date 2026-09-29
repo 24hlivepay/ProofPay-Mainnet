@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { connectWalletWithOptions, getWalletErrorMessage } from "../../services/wallet";
+import {
+  connectWalletWithOptions,
+  discoverInjectedWallets,
+  getWalletErrorMessage,
+} from "../../services/wallet";
 import { getNetworkConfig } from "../../config/network";
 import ProofPayLogo from "../../components/ProofPayLogo";
 
@@ -10,14 +14,24 @@ export default function Hero() {
   const [walletStatus, setWalletStatus] = useState("");
   const [walletError, setWalletError] = useState("");
   const [showWalletChoices, setShowWalletChoices] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [installedWallets, setInstalledWallets] = useState([]);
 
-  async function handleWalletConnection(walletType) {
+  async function openWalletChoices() {
+    setShowWalletChoices(true);
+    setDiscovering(true);
+    setInstalledWallets(await discoverInjectedWallets());
+    setDiscovering(false);
+  }
+
+  async function handleWalletConnection(walletType, walletLabel) {
     try {
       setConnecting(true);
       setWalletError("");
       await connectWalletWithOptions({
         requireSignature: true,
         walletType,
+        walletLabel,
         onStatus: setWalletStatus,
       });
       // connectWalletWithOptions already posts to /wallet/connect and stores
@@ -59,7 +73,7 @@ export default function Hero() {
 
           <button
             type="button"
-            onClick={() => setShowWalletChoices((visible) => !visible)}
+            onClick={openWalletChoices}
             disabled={connecting}
             className="w-full rounded-xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -121,21 +135,28 @@ export default function Hero() {
               </button>
             </div>
 
-            <div className="mt-7 space-y-3">
-              <WalletOption
-                name="MetaMask"
-                description="Connect using the MetaMask browser extension."
-                symbol="M"
-                disabled={connecting}
-                onClick={() => handleWalletConnection("metamask")}
-              />
-              <WalletOption
-                name="Rabby Wallet"
-                description="Connect using the Rabby browser extension."
-                symbol="R"
-                disabled={connecting}
-                onClick={() => handleWalletConnection("rabby")}
-              />
+            <div className="mt-7 max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              {discovering && (
+                <p className="py-6 text-center text-sm text-slate-500">Looking for installed wallets...</p>
+              )}
+
+              {!discovering && installedWallets.length === 0 && (
+                <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+                  No wallet extension was detected in this browser. Install MetaMask, Rabby, or another
+                  wallet extension, then reload this page.
+                </p>
+              )}
+
+              {!discovering &&
+                installedWallets.map((wallet) => (
+                  <WalletOption
+                    key={wallet.rdns}
+                    name={wallet.name}
+                    icon={wallet.icon}
+                    disabled={connecting}
+                    onClick={() => handleWalletConnection(wallet.rdns, wallet.name)}
+                  />
+                ))}
             </div>
 
             {connecting && (
@@ -155,7 +176,7 @@ export default function Hero() {
   );
 }
 
-function WalletOption({ name, description, symbol, disabled, onClick }) {
+function WalletOption({ name, icon, disabled, onClick }) {
   return (
     <button
       type="button"
@@ -163,12 +184,15 @@ function WalletOption({ name, description, symbol, disabled, onClick }) {
       disabled={disabled}
       className="flex w-full items-center gap-4 rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-500 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white">
-        {symbol}
-      </span>
+      {icon ? (
+        <img src={icon} alt="" className="h-12 w-12 shrink-0 rounded-xl object-contain" />
+      ) : (
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white">
+          {name?.[0] || "W"}
+        </span>
+      )}
       <span>
         <span className="block font-bold text-slate-900">{name}</span>
-        <span className="mt-1 block text-sm text-slate-500">{description}</span>
       </span>
       <span className="ml-auto text-xl text-slate-400">›</span>
     </button>

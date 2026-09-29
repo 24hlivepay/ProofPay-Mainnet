@@ -3,7 +3,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import {
   connectWalletWithOptions,
+  discoverInjectedWallets,
   disconnectWallet,
+  getInjectedWallet,
   getWalletErrorMessage,
   getWalletSession,
 } from "../services/wallet";
@@ -48,30 +50,43 @@ export default function Home() {
   useEffect(() => {
     if (isCircleWallet) return undefined;
 
-    const injected = window.ethereum;
-    const provider = walletType === "rabby"
-      ? (injected?.providers || []).find((item) => item?.isRabby) ||
-        (injected?.isRabby ? injected : null)
-      : injected;
+    let cancelled = false;
+    let cleanup;
 
-    if (!provider?.on) return undefined;
+    async function attach() {
+      // getInjectedWallet only knows the two legacy WALLET_DETAILS entries;
+      // any other wallet (picked from the dynamic discoverInjectedWallets()
+      // list in Hero.jsx) needs the same EIP-6963 rdns lookup to find its
+      // real provider instance among everything installed.
+      const provider =
+        getInjectedWallet(walletType) ||
+        (await discoverInjectedWallets()).find((w) => w.rdns === walletType)?.provider;
 
-    const handleAccountsChanged = (accounts = []) => {
-      const nextAddress = accounts[0] || "";
-      if (!nextAddress) {
-        setWalletAddress("");
-        setWalletStatus("Wallet disconnected. Connect again to continue.");
-        return;
-      }
+      if (cancelled || !provider?.on) return;
 
-      if (nextAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-        setWalletStatus("Wallet account changed. Sign the ProofPay message to continue.");
-        handleConnectWallet();
-      }
+      const handleAccountsChanged = (accounts = []) => {
+        const nextAddress = accounts[0] || "";
+        if (!nextAddress) {
+          setWalletAddress("");
+          setWalletStatus("Wallet disconnected. Connect again to continue.");
+          return;
+        }
+
+        if (nextAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+          setWalletStatus("Wallet account changed. Sign the ProofPay message to continue.");
+          handleConnectWallet();
+        }
+      };
+
+      provider.on("accountsChanged", handleAccountsChanged);
+      cleanup = () => provider.removeListener?.("accountsChanged", handleAccountsChanged);
+    }
+
+    attach();
+    return () => {
+      cancelled = true;
+      cleanup?.();
     };
-
-    provider.on("accountsChanged", handleAccountsChanged);
-    return () => provider.removeListener?.("accountsChanged", handleAccountsChanged);
   }, [isCircleWallet, walletAddress, walletType]);
 
   useEffect(() => {

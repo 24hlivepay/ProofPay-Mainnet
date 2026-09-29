@@ -10,7 +10,11 @@ function getWalletAddEthereumChainParams(network = getNetworkConfig()) {
   };
 }
 
-const WALLET_DETAILS = {
+// Legacy fallback only, for the rare pre-EIP-6963 extension that never
+// announces itself and so can't be found by rdns below. Every wallet
+// (including ones not listed here) is discovered generically through
+// EIP-6963 -- see discoverInjectedWallets() and getWalletProvider().
+export const WALLET_DETAILS = {
   metamask: {
     label: "MetaMask",
     rdns: "io.metamask",
@@ -28,8 +32,10 @@ const WALLET_DETAILS = {
   },
 };
 
-function getInjectedWallet(walletType) {
-  const wallet = WALLET_DETAILS[walletType] || WALLET_DETAILS.metamask;
+export function getInjectedWallet(walletType) {
+  const wallet = WALLET_DETAILS[walletType];
+  if (!wallet) return null;
+
   const injected = window.ethereum;
   const providers = injected?.providers || [];
 
@@ -39,12 +45,37 @@ function getInjectedWallet(walletType) {
   );
 }
 
+// Listens for every EIP-6963 wallet announcement and returns them all, so
+// the UI can show exactly what's actually installed instead of a fixed
+// guess list. Standard pattern used by most dApps (RainbowKit, ConnectKit,
+// Web3Modal, etc.) -- new wallets need no code change to show up here.
+export async function discoverInjectedWallets() {
+  const found = new Map();
+  const handleProvider = (event) => {
+    const { info, provider } = event.detail || {};
+    if (info?.rdns && provider) {
+      found.set(info.rdns, { rdns: info.rdns, name: info.name, icon: info.icon, provider });
+    }
+  };
+
+  window.addEventListener("eip6963:announceProvider", handleProvider);
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  window.removeEventListener("eip6963:announceProvider", handleProvider);
+
+  return [...found.values()];
+}
+
 async function getWalletProvider(walletType) {
   if (walletType === "circle") {
     return null;
   }
 
-  const wallet = WALLET_DETAILS[walletType] || WALLET_DETAILS.metamask;
+  // walletType is either a legacy WALLET_DETAILS key ("metamask", "rabby")
+  // or, for any wallet chosen from the dynamic discoverInjectedWallets()
+  // list, its raw EIP-6963 rdns (e.g. "com.coinbase.wallet") -- both are
+  // matched by rdns below, so no per-wallet code is needed either way.
+  const targetRdns = WALLET_DETAILS[walletType]?.rdns || walletType;
   const announcedProviders = [];
   const handleProvider = (event) => announcedProviders.push(event.detail);
   window.addEventListener("eip6963:announceProvider", handleProvider);
@@ -53,19 +84,31 @@ async function getWalletProvider(walletType) {
   window.removeEventListener("eip6963:announceProvider", handleProvider);
 
   const exactProvider = announcedProviders.find(
-    ({ info }) => info?.rdns === wallet.rdns
+    ({ info }) => info?.rdns === targetRdns
   )?.provider;
 
   return exactProvider || getInjectedWallet(walletType);
 }
 
+// The label for a wallet the user picked from the dynamic
+// discoverInjectedWallets() list (anything not in WALLET_DETAILS) is only
+// known at connect time, from its own EIP-6963 announcement -- cached here
+// so later pages/reconnects can show the real name instead of "wallet".
+function getWalletLabel(walletType) {
+  return (
+    WALLET_DETAILS[walletType]?.label ||
+    localStorage.getItem("proofpay-wallet-label") ||
+    "wallet"
+  );
+}
+
 export async function ensureArcNetwork(onStatus, walletProvider) {
   const network = getNetworkConfig();
   const walletType = localStorage.getItem("proofpay-wallet-type") || "metamask";
-  const walletLabel = WALLET_DETAILS[walletType]?.label || "wallet";
+  const walletLabel = getWalletLabel(walletType);
   const ethereum = walletProvider || await getWalletProvider(walletType);
   if (!ethereum) {
-    throw new Error(`${WALLET_DETAILS[walletType].label} is not installed.`);
+    throw new Error(`${walletLabel} is not installed.`);
   }
 
   const currentChainId = await ethereum.request({
@@ -116,6 +159,10 @@ export async function connectWalletWithOptions({
   requireSignature = false,
   requestAccountSelection = false,
   walletType = localStorage.getItem("proofpay-wallet-type") || "metamask",
+  // Display name for a wallet picked from the dynamic discoverInjectedWallets()
+  // list (its own EIP-6963 announced name) -- WALLET_DETAILS doesn't know
+  // about it, so the caller passes it through to store alongside walletType.
+  walletLabel,
   onStatus,
 } = {}) {
   if (walletType === "circle") {
@@ -169,14 +216,15 @@ export async function connectWalletWithOptions({
     };
   }
 
-  const wallet = WALLET_DETAILS[walletType] || WALLET_DETAILS.metamask;
+  const label = WALLET_DETAILS[walletType]?.label || walletLabel || "your wallet";
   const ethereum = await getWalletProvider(walletType);
   if (!ethereum) {
-    throw new Error(`${wallet.label} is not installed.`);
+    throw new Error(`${label} is not installed.`);
   }
 
   localStorage.setItem("proofpay-wallet-type", walletType);
-  onStatus?.(requestAccountSelection ? `Choose the ${wallet.label} account you want to use...` : `Connecting ${wallet.label}...`);
+  localStorage.setItem("proofpay-wallet-label", label);
+  onStatus?.(requestAccountSelection ? `Choose the ${label} account you want to use...` : `Connecting ${label}...`);
 
   if (requestAccountSelection) {
     if (walletType === "rabby") {
@@ -307,14 +355,14 @@ export function getWalletErrorMessage(error) {
   const message = error?.message || "";
 
   if (error?.code === 4001 || /user rejected|user denied/i.test(message)) {
-    return "You cancelled the MetaMask request. You can connect whenever you are ready.";
+    return "You cancelled the wallet request. You can connect whenever you are ready.";
   }
 
   if (/not installed/i.test(message) || /circle wallet session has expired/i.test(message)) {
     return message;
   }
 
-  return "We could not connect your wallet. Please unlock MetaMask or Rabby and try again.";
+  return "We could not connect your wallet. Please unlock it and try again.";
 }
 
 export function getConnectedWallet() {
