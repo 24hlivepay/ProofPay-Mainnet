@@ -14,6 +14,7 @@ import {
 } from "../services/wallet";
 import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
+import { getEscrowAsset } from "../config/escrowAssets";
 import { getCurrentNetworkId, getExplorerTxUrl, getNetworkConfig } from "../config/network";
 import { shortenAddress } from "../utils/address";
 
@@ -34,8 +35,18 @@ async function fetchHeldTokens(address, explorerBase) {
   if (!response.ok) return [];
   const balances = await response.json();
 
+  // Arc exposes native USDC through an ERC20-interface precompile too (see
+  // escrowAssets.js' USDC tokenAddress), so it shows up in this list a
+  // second time alongside the real native balance below -- skip it here.
+  const nativeUsdcPrecompile = getEscrowAsset("USDC").tokenAddress.toLowerCase();
+
   return balances
-    .filter((entry) => entry.token?.type === "ERC-20" && Number(entry.value) > 0)
+    .filter(
+      (entry) =>
+        entry.token?.type === "ERC-20" &&
+        Number(entry.value) > 0 &&
+        entry.token.address_hash?.toLowerCase() !== nativeUsdcPrecompile
+    )
     .map((entry) => ({
       id: `arc-${entry.token.address_hash.toLowerCase()}`,
       symbol: entry.token.symbol,
