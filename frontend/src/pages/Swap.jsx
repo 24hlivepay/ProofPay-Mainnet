@@ -372,9 +372,6 @@ export default function Swap() {
                       </>
                     )}
                   </p>
-                  <div className="mt-3">
-                    <PrimaryButton onClick={() => navigate("/dashboard")}>Back to Dashboard</PrimaryButton>
-                  </div>
                 </div>
               )}
             </div>
