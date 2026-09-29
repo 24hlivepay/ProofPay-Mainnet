@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
+import { Contract, formatUnits } from "ethers";
 import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
-import { getCurrentWalletProvider } from "../services/wallet";
+import { connectWallet, getCurrentWalletProvider } from "../services/wallet";
+import { getEscrowAsset } from "../config/escrowAssets";
 import { getNetworkConfig } from "../config/network";
+
+const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
 // Swap is an App Kit SDK capability (same package Onramp already uses),
 // not a separate SDK: no server involvement for an EOA wallet -- the
@@ -16,11 +20,34 @@ import { getNetworkConfig } from "../config/network";
 // approval can't happen through a browser-injected signer; that path isn't
 // built yet, so this page (and its dashboard entry) is EOA-only for now.
 //
-// On Arc, Swap only accepts USDC, EURC, and cirBTC (see
-// https://docs.arc.io/app-kit/swap); ProofPay's own escrow config only
-// tracks USDC/EURC contract addresses today, so those are the only pair
-// offered here.
-const SWAP_TOKENS = ["USDC", "EURC"];
+// On Arc, Swap accepts USDC, EURC, and cirBTC (see
+// https://docs.arc.io/app-kit/swap) -- the actual swap call just takes
+// these as token alias strings; App Kit resolves the real address itself.
+// A contract address is only needed here for the balanceOf() display below.
+const SWAP_TOKENS = ["USDC", "EURC", "cirBTC"];
+
+// cirBTC deliberately isn't in config/escrowAssets.js: that file is
+// ProofPay's escrow-contract asset support (deposit/release), and no
+// ProofPay escrow exists for cirBTC -- adding it there would wrongly offer
+// it as a createEscrow asset. This is only for the balance line here.
+// Addresses verified on explorer.arc.io / explorer.testnet.arc.io: of
+// several tokens sharing the "cirBTC" name (a common impersonation
+// pattern), these are the dominant ones by holders/market cap by a wide
+// margin, and the mainnet listing's website field is www.circle.com.
+const CIRBTC_INFO = {
+  mainnet: { tokenAddress: "0x171A4217b86A807A64eB94757Db6849fb4bDbAA0", decimals: 8 },
+  testnet: { tokenAddress: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF", decimals: 8 },
+};
+
+// USDC/EURC come from the shared escrow asset config (already verified
+// there); cirBTC comes from CIRBTC_INFO above. Returns the same shape
+// either way: { isNative, tokenAddress, decimals }.
+function getSwapTokenInfo(symbol, networkId) {
+  if (symbol === "cirBTC") {
+    return { isNative: false, ...CIRBTC_INFO[networkId] };
+  }
+  return getEscrowAsset(symbol, networkId);
+}
 
 const kit = new AppKit();
 
@@ -36,6 +63,58 @@ export default function Swap() {
   const [estimate, setEstimate] = useState(null);
   const [message, setMessage] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [balances, setBalances] = useState({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
+
+  async function loadBalances() {
+    if (isCircleWallet || !walletAddress) return;
+    try {
+      setBalancesLoading(true);
+      const { address, provider } = await connectWallet();
+      const next = {};
+      for (const symbol of SWAP_TOKENS) {
+        const asset = getSwapTokenInfo(symbol, network.id);
+        // USDC is Arc's native gas currency (18 decimals, provider.getBalance),
+        // not a regular ERC20 -- see network.js' nativeCurrency.
+        next[symbol] = asset.isNative
+          ? formatUnits(await provider.getBalance(address), 18)
+          : formatUnits(
+              await new Contract(asset.tokenAddress, BALANCE_ABI, provider).balanceOf(address),
+              asset.decimals
+            );
+      }
+      setBalances(next);
+    } catch {
+      // Balance display is a convenience -- the swap flow itself still
+      // works even if this fails (e.g. a stale/disconnected provider).
+    } finally {
+      setBalancesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletAddress, isCircleWallet]);
+
+  function formatBalance(symbol) {
+    const value = balances[symbol];
+    if (value === undefined) return balancesLoading ? "..." : null;
+    return Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 });
+  }
+
+  function fillMaxAmount() {
+    const raw = Number(balances[tokenIn] || 0);
+    if (raw <= 0) return;
+    // tokenIn === the native asset means gas for this very swap is paid out
+    // of the same balance -- reserve a small buffer so "Max" doesn't leave
+    // nothing to pay the transaction fee with.
+    const reserve = getSwapTokenInfo(tokenIn, network.id).isNative ? 0.5 : 0;
+    const max = Math.max(raw - reserve, 0);
+    setAmountIn(String(max));
+    setEstimate(null);
+    setStatus("idle");
+  }
 
   function swapDirection() {
     setTokenIn(tokenOut);
@@ -90,6 +169,7 @@ export default function Swap() {
       });
       setTxHash(result?.transactionHash || result?.hash || "");
       setStatus("done");
+      loadBalances();
     } catch (error) {
       setStatus("error");
       setMessage(
@@ -126,7 +206,18 @@ export default function Swap() {
           ) : (
             <div className="mt-6 space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700">You pay</label>
+                <div className="flex items-baseline justify-between">
+                  <label className="text-sm font-semibold text-slate-700">You pay</label>
+                  {formatBalance(tokenIn) !== null && (
+                    <button
+                      type="button"
+                      onClick={fillMaxAmount}
+                      className="text-xs font-semibold text-blue-700 hover:underline"
+                    >
+                      Balance: {formatBalance(tokenIn)} {tokenIn} · Max
+                    </button>
+                  )}
+                </div>
                 <div className="mt-1 flex gap-2">
                   <input
                     type="number"
@@ -171,7 +262,14 @@ export default function Swap() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700">You receive</label>
+                <div className="flex items-baseline justify-between">
+                  <label className="text-sm font-semibold text-slate-700">You receive</label>
+                  {formatBalance(tokenOut) !== null && (
+                    <span className="text-xs text-slate-500">
+                      Balance: {formatBalance(tokenOut)} {tokenOut}
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 flex gap-2">
                   <input
                     type="text"
