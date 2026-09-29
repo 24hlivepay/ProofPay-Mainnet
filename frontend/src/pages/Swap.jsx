@@ -65,6 +65,38 @@ export default function Swap() {
   const [txHash, setTxHash] = useState("");
   const [balances, setBalances] = useState({});
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [prices, setPrices] = useState({});
+
+  async function loadPrices() {
+    // Testnet tokens have no real market value, so there's nothing
+    // meaningful to show there -- USD display is mainnet-only.
+    if (network.id !== "mainnet") return;
+    try {
+      const entries = await Promise.all(
+        SWAP_TOKENS.map(async (symbol) => {
+          const { tokenAddress } = getSwapTokenInfo(symbol, network.id);
+          const response = await fetch(`${network.explorerBase}/api/v2/tokens/${tokenAddress}`);
+          const data = await response.json();
+          return [symbol, Number(data?.exchange_rate) || null];
+        })
+      );
+      setPrices(Object.fromEntries(entries));
+    } catch {
+      // USD display is a convenience -- the swap flow itself doesn't need it.
+    }
+  }
+
+  useEffect(() => {
+    loadPrices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function formatUsd(symbol, amount) {
+    const price = prices[symbol];
+    const value = Number(amount);
+    if (!price || !value) return null;
+    return (price * value).toLocaleString(undefined, { style: "currency", currency: "USD" });
+  }
 
   async function loadBalances() {
     if (isCircleWallet || !walletAddress) return;
@@ -275,6 +307,9 @@ export default function Swap() {
                     ))}
                   </select>
                 </div>
+                {formatUsd(tokenIn, amountIn) && (
+                  <p className="mt-1 text-xs text-slate-400">{formatUsd(tokenIn, amountIn)}</p>
+                )}
               </div>
 
               <div className="flex justify-center">
@@ -321,6 +356,11 @@ export default function Swap() {
                     ))}
                   </select>
                 </div>
+                {formatUsd(tokenOut, estimate?.estimatedOutput?.amount) && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {formatUsd(tokenOut, estimate?.estimatedOutput?.amount)}
+                  </p>
+                )}
               </div>
 
               {estimate && (
