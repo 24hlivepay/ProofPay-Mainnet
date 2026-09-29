@@ -131,6 +131,22 @@ export default function Swap() {
     return createViemAdapterFromProvider({ provider });
   }
 
+  function buildSwapParams(adapter) {
+    return {
+      from: { adapter, chain: network.id === "mainnet" ? "Arc" : "Arc_Testnet" },
+      tokenIn,
+      tokenOut,
+      amountIn,
+      // App Kit's default is "permit" (falling back to "approve" only if
+      // permit fails) -- a real swap here reverted with InsufficientAllowance
+      // (Solidity custom error 0x13be252b, decoded via 4byte.directory),
+      // meaning the permit attempt wasn't actually falling back. Forcing
+      // "approve" skips the broken permit path and goes straight to a
+      // plain on-chain approve + swap.
+      config: { allowanceStrategy: "approve" },
+    };
+  }
+
   async function getEstimate() {
     if (!amountIn || Number(amountIn) <= 0) {
       setEstimate(null);
@@ -142,12 +158,7 @@ export default function Swap() {
       setStatus("estimating");
       setMessage("");
       const adapter = await buildAdapter();
-      const result = await kit.estimateSwap({
-        from: { adapter, chain: network.id === "mainnet" ? "Arc" : "Arc_Testnet" },
-        tokenIn,
-        tokenOut,
-        amountIn,
-      });
+      const result = await kit.estimateSwap(buildSwapParams(adapter));
       setEstimate(result);
       setStatus("ready");
     } catch (error) {
@@ -182,12 +193,7 @@ export default function Swap() {
       setStatus("swapping");
       setMessage("");
       const adapter = await buildAdapter();
-      const result = await kit.swap({
-        from: { adapter, chain: network.id === "mainnet" ? "Arc" : "Arc_Testnet" },
-        tokenIn,
-        tokenOut,
-        amountIn,
-      });
+      const result = await kit.swap(buildSwapParams(adapter));
       setTxHash(result?.transactionHash || result?.hash || "");
       setStatus("done");
       loadBalances();
