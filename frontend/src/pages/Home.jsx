@@ -38,6 +38,7 @@ export default function Home() {
   const walletType = localStorage.getItem("proofpay-wallet-type") || "metamask";
   const isCircleWallet = walletType === "circle";
   const [walletAddress, setWalletAddress] = useState(() => getWalletSession()?.address || "");
+  const [activeGroup, setActiveGroup] = useState("wallet");
   const [walletError, setWalletError] = useState("");
   const [walletStatus, setWalletStatus] = useState("");
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
@@ -358,21 +359,39 @@ export default function Home() {
         )}
 
         {!mode && (
-          <div className="mx-auto mt-7 max-w-5xl space-y-8">
-            <section>
-              <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Wallet</h2>
-              <div className={`mt-3 grid gap-4 sm:grid-cols-2 ${isCircleWallet ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
+          <div className="mx-auto mt-7 max-w-5xl">
+            <div className="flex gap-2 border-b border-slate-200">
+              {[
+                { key: "wallet", label: "Wallet" },
+                { key: "escrows", label: "Escrows" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveGroup(tab.key)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold ${
+                    activeGroup === tab.key
+                      ? "border-green-600 text-green-700"
+                      : "border-transparent text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeGroup === "wallet" && (
+              <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${isCircleWallet ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
                 <WorkspaceCard icon="💳" title="My Wallet" description={`View balances, receive, and send supported ${getNetworkConfig().chainName} tokens.`} onClick={() => navigate("/wallet")} />
                 <WorkspaceCard icon="💵" title="Onramp — Buy Crypto" description="Fund your wallet with a card, Apple Pay, Google Pay, or bank transfer." onClick={() => navigate("/onramp")} />
                 {!isCircleWallet && (
                   <WorkspaceCard icon="🔄" title="Swap" description="Exchange USDC and EURC directly from your connected wallet." onClick={() => navigate("/swap")} />
                 )}
               </div>
-            </section>
+            )}
 
-            <section>
-              <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Escrows</h2>
-              <div className={`mt-3 grid gap-4 sm:grid-cols-2 ${isDisputeAdmin ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
+            {activeGroup === "escrows" && (
+              <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${isDisputeAdmin ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
                 {isDisputeAdmin ? (
                   <WorkspaceCard icon="🛡️" title="Admin Disputes" description="Review evidence from both sides and settle disputed escrows on-chain." badge={openDisputeCount} onClick={() => navigate("/admin/disputes")} />
                 ) : (
@@ -382,7 +401,7 @@ export default function Home() {
                   </>
                 )}
               </div>
-            </section>
+            )}
           </div>
         )}
 
