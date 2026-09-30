@@ -120,8 +120,12 @@ export default function Swap() {
         const tokenBalances = response.data.data?.tokenBalances || [];
         const next = {};
         for (const symbol of SWAP_TOKENS) {
+          // A token the wallet has never held has no entry in Circle's
+          // response at all -- explicitly "0", not left unset, so its
+          // Balance/Max line still renders (and shows 0) instead of
+          // silently disappearing.
           const match = tokenBalances.find((item) => item?.token?.symbol === symbol);
-          if (match) next[symbol] = match.amount;
+          next[symbol] = match ? match.amount : "0";
         }
         setBalances(next);
         return;
