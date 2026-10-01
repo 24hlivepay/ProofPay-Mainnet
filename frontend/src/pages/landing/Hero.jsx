@@ -37,9 +37,9 @@ export default function Hero() {
       // connectWalletWithOptions already posts to /wallet/connect and stores
       // the JWT internally (PR-3) -- posting again here would reuse the
       // same single-use SIWE nonce and always fail.
-      setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}. Opening your dashboard...`);
+      setWalletStatus(`Wallet connected to ${getNetworkConfig().chainName}. Opening your wallet...`);
       setShowWalletChoices(false);
-      navigate("/dashboard");
+      navigate("/wallet");
     } catch (error) {
       setWalletStatus("");
       setWalletError(getWalletErrorMessage(error));
