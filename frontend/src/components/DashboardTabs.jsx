@@ -31,7 +31,7 @@ export default function DashboardTabs({ className = "flex" }) {
             onClick={() => navigate(tab.to)}
             className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold transition ${
               active
-                ? "bg-green-600 text-white"
+                ? "bg-blue-600 text-white"
                 : "text-slate-600 hover:bg-slate-100"
             }`}
           >

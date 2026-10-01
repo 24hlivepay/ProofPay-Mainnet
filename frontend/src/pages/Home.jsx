@@ -457,7 +457,7 @@ function StatCard({ label, value }) {
 }
 
 function BackToWorkspaces({ onClick }) {
-  return <button onClick={onClick} className="mt-8 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">← Back</button>;
+  return <button onClick={onClick} className="mt-8 font-semibold text-blue-600 hover:text-blue-700">← Back</button>;
 }
 
 function WorkspaceCard({ icon, title, description, onClick, badge = 0 }) {
