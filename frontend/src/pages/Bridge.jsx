@@ -6,6 +6,8 @@ import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 import { Contract, JsonRpcProvider, formatUnits } from "ethers";
 import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
+import SwapBridgeTabs from "../components/SwapBridgeTabs";
+import DetailRow from "../components/DetailRow";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -368,13 +370,12 @@ export default function Bridge() {
           ← Back to Dashboard
         </button>
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Bridge</h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Move USDC and EURC between {network.chainName} and other blockchains.
-              </p>
-            </div>
+          <h1 className="sr-only">Bridge</h1>
+          <SwapBridgeTabs active="bridge" disabled={busy} />
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-slate-500">
+              Move USDC and EURC between {network.chainName} and other blockchains.
+            </p>
             {!mainnetLocked && walletAddress && !isCircleWallet && (
               <div className="flex shrink-0 rounded-full bg-slate-100 p-1" role="tablist" aria-label="Token">
                 {BRIDGE_TOKENS.map((symbol) => (
@@ -493,10 +494,10 @@ export default function Bridge() {
               {estimate && (
                 <dl className="mt-4 space-y-2 rounded-2xl border border-slate-200 p-4 text-sm">
                   {deductedFee > 0 && (
-                    <FeeRow label="Bridge fee" value={`${trimAmount(deductedFee)} ${token}`} note="taken from the amount that arrives" />
+                    <DetailRow label="Bridge fee" value={`${trimAmount(deductedFee)} ${token}`} note="taken from the amount that arrives" />
                   )}
                   {extraFees.map((fee) => (
-                    <FeeRow
+                    <DetailRow
                       key={`${fee.type}-${fee.token}`}
                       label="Bridge fee"
                       value={`${trimAmount(fee.amount, 8)} ${fee.token}`}
@@ -504,10 +505,10 @@ export default function Bridge() {
                     />
                   ))}
                   {sourceGas > 0 && (
-                    <FeeRow label="Network fee" value={`~${trimAmount(sourceGas, 8)} ${sourceGasToken}`} note={`on ${sourceInfo.name}`} />
+                    <DetailRow label="Network fee" value={`~${trimAmount(sourceGas, 8)} ${sourceGasToken}`} note={`on ${sourceInfo.name}`} />
                   )}
-                  <FeeRow label="Arrival time" value="A few minutes" />
-                  <FeeRow label="Recipient" value={shortAddress} note={`your wallet on ${destinationInfo.name}`} />
+                  <DetailRow label="Arrival time" value="A few minutes" />
+                  <DetailRow label="Recipient" value={shortAddress} note={`your wallet on ${destinationInfo.name}`} />
                 </dl>
               )}
 
@@ -577,18 +578,6 @@ export default function Bridge() {
           )}
         </div>
       </main>
-    </div>
-  );
-}
-
-function FeeRow({ label, value, note }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-semibold text-slate-900">
-        {value}
-        {note && <span className="block text-xs font-normal text-slate-400">{note}</span>}
-      </dd>
     </div>
   );
 }
