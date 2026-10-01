@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { AppKit } from "@circle-fin/app-kit";
 import * as SDK_CHAINS from "@circle-fin/app-kit/chains";
 import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
@@ -135,7 +134,6 @@ function trimAmount(value, digits = 6) {
 
 export default function Bridge() {
   const { walletSlot, walletAddress } = useWalletBadge();
-  const navigate = useNavigate();
   const network = getNetworkConfig();
   const routes = BRIDGE_ROUTES[network.id];
   const isCircleWallet = (localStorage.getItem("proofpay-wallet-type") || "metamask") === "circle";
@@ -490,9 +488,6 @@ export default function Bridge() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
-        <button onClick={() => navigate("/dashboard")} className="font-semibold text-blue-600 hover:text-blue-700">
-          ← Back
-        </button>
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h1 className="sr-only">Bridge</h1>
           <SwapBridgeTabs active="bridge" disabled={busy} />
