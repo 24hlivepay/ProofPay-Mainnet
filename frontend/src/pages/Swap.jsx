@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 import { Contract, formatUnits } from "ethers";
 import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
+import SwapBridgeTabs from "../components/SwapBridgeTabs";
+import DetailRow from "../components/DetailRow";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -58,6 +60,9 @@ function getSwapTokenInfo(symbol, networkId) {
 
 const kit = new AppKit();
 
+// App Kit labels each fee line with a type; these are the names shown.
+const FEE_LABELS = { provider: "Swap fee", gas: "Network fee" };
+
 export default function Swap() {
   const { walletSlot, walletAddress } = useWalletBadge();
   const navigate = useNavigate();
@@ -73,6 +78,10 @@ export default function Swap() {
   const [balances, setBalances] = useState({});
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [prices, setPrices] = useState({});
+  // True while a swap is in flight, so a second click that lands before
+  // React re-renders the disabled button cannot start a second swap (the
+  // same guard Bridge.jsx uses, added after a real double run there).
+  const runningRef = useRef(false);
 
   async function loadPrices() {
     // Testnet tokens have no real market value, so there's nothing
@@ -331,6 +340,8 @@ export default function Swap() {
   }
 
   async function confirmSwap() {
+    if (runningRef.current) return;
+    runningRef.current = true;
     try {
       setStatus("swapping");
       setMessage("");
@@ -355,8 +366,40 @@ export default function Swap() {
         error.message ||
         "The swap did not go through."
       );
+    } finally {
+      runningRef.current = false;
     }
   }
+
+  const busy = status === "swapping";
+  const balanceIn = balances[tokenIn];
+  const insufficient = balanceIn !== undefined && Number(amountIn) > Number(balanceIn);
+  const outputAmount = estimate?.estimatedOutput?.amount;
+
+  let buttonLabel = `Swap ${tokenIn} for ${tokenOut}`;
+  if (!amountIn || Number(amountIn) <= 0) buttonLabel = "Enter an amount";
+  else if (insufficient) buttonLabel = `Not enough ${tokenIn}`;
+  else if (status === "estimating") buttonLabel = "Getting quote...";
+
+  const tokenPicker = (value, onChange, otherToken, label) => (
+    <select
+      value={value}
+      disabled={busy}
+      onChange={(event) => {
+        onChange(event.target.value);
+        setEstimate(null);
+        setStatus("idle");
+      }}
+      className="shrink-0 cursor-pointer rounded-lg bg-transparent py-1 pr-1 text-lg font-bold text-slate-900 focus:outline-none"
+      aria-label={label}
+    >
+      {SWAP_TOKENS.map((symbol) => (
+        <option key={symbol} value={symbol} disabled={symbol === otherToken}>
+          {symbol}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -365,11 +408,11 @@ export default function Swap() {
         <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
           ← Back to Dashboard
         </button>
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h1 className="text-3xl font-bold text-slate-900">Swap</h1>
-          <p className="mt-2 text-slate-600">
-            Exchange USDC and EURC directly from your {network.chainName} wallet. Your wallet signs
-            the swap itself — ProofPay never holds your funds.
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <h1 className="sr-only">Swap</h1>
+          <SwapBridgeTabs active="swap" disabled={busy} />
+          <p className="mt-4 text-sm text-slate-500">
+            Exchange USDC, EURC and cirBTC on {network.chainName}.
           </p>
 
           {!walletAddress ? (
@@ -377,131 +420,105 @@ export default function Swap() {
               Connect your wallet first, then come back to this page.
             </p>
           ) : (
-            <div className="mt-6 space-y-4">
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="text-sm font-semibold text-slate-700">You pay</label>
-                  {formatBalance(tokenIn) !== null && (
-                    <button
-                      type="button"
-                      onClick={fillMaxAmount}
-                      className="text-xs font-semibold text-blue-700 hover:underline"
-                    >
-                      Balance: {formatBalance(tokenIn)} {tokenIn} · Max
-                    </button>
-                  )}
-                </div>
-                <div className="mt-1 flex gap-2">
+            <div className="mt-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 focus-within:border-blue-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">You pay</span>
+                <div className="mt-3 flex items-center gap-3">
                   <input
                     type="number"
                     min="0"
                     step="any"
+                    inputMode="decimal"
                     value={amountIn}
+                    disabled={busy}
                     onChange={(event) => {
                       setAmountIn(event.target.value);
                       setEstimate(null);
                       setStatus("idle");
                     }}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg focus:border-blue-500 focus:outline-none"
+                    placeholder="0"
+                    aria-label="Amount to pay"
+                    className="w-full min-w-0 [appearance:textfield] bg-transparent text-3xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
-                  <select
-                    value={tokenIn}
-                    onChange={(event) => {
-                      setTokenIn(event.target.value);
-                      setEstimate(null);
-                      setStatus("idle");
-                    }}
-                    className="rounded-xl border border-slate-300 px-3 py-3 font-semibold"
-                  >
-                    {SWAP_TOKENS.map((symbol) => (
-                      <option key={symbol} value={symbol} disabled={symbol === tokenOut}>
-                        {symbol}
-                      </option>
-                    ))}
-                  </select>
+                  {tokenPicker(tokenIn, setTokenIn, tokenOut, "Token to pay")}
                 </div>
-                {formatUsd(tokenIn, amountIn) && (
-                  <p className="mt-1 text-xs text-slate-400">{formatUsd(tokenIn, amountIn)}</p>
-                )}
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className={insufficient ? "font-semibold text-red-600" : "text-slate-500"}>
+                    Balance: {formatBalance(tokenIn) ?? "—"} {tokenIn}
+                    {formatUsd(tokenIn, amountIn) && <span className="text-slate-400"> · {formatUsd(tokenIn, amountIn)}</span>}
+                  </span>
+                  {Number(balanceIn) > 0 && (
+                    <button
+                      type="button"
+                      onClick={fillMaxAmount}
+                      disabled={busy}
+                      className="rounded-full bg-blue-100 px-2.5 py-0.5 font-bold text-blue-700 hover:bg-blue-50"
+                    >
+                      Max
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex justify-center">
+              <div className="relative z-10 -my-3 flex justify-center">
                 <button
                   type="button"
                   onClick={swapDirection}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 hover:bg-slate-50"
+                  disabled={busy}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-600 shadow-sm hover:bg-slate-50"
                   aria-label="Reverse swap direction"
                 >
                   ⇅
                 </button>
               </div>
 
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="text-sm font-semibold text-slate-700">You receive</label>
-                  {formatBalance(tokenOut) !== null && (
-                    <span className="text-xs text-slate-500">
-                      Balance: {formatBalance(tokenOut)} {tokenOut}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={estimate?.estimatedOutput?.amount || ""}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg text-slate-600"
-                  />
-                  <select
-                    value={tokenOut}
-                    onChange={(event) => {
-                      setTokenOut(event.target.value);
-                      setEstimate(null);
-                      setStatus("idle");
-                    }}
-                    className="rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">You receive</span>
+                <div className="mt-3 flex items-center gap-3">
+                  <p
+                    className={`w-full min-w-0 truncate text-3xl font-semibold ${
+                      outputAmount ? "text-slate-900" : "text-slate-300"
+                    }`}
+                    aria-label="Amount you receive"
                   >
-                    {SWAP_TOKENS.map((symbol) => (
-                      <option key={symbol} value={symbol} disabled={symbol === tokenIn}>
-                        {symbol}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {formatUsd(tokenOut, estimate?.estimatedOutput?.amount) && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {formatUsd(tokenOut, estimate?.estimatedOutput?.amount)}
+                    {outputAmount || (status === "estimating" ? "..." : "0")}
                   </p>
+                  {tokenPicker(tokenOut, setTokenOut, tokenIn, "Token to receive")}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Balance: {formatBalance(tokenOut) ?? "—"} {tokenOut}
+                  {formatUsd(tokenOut, outputAmount) && <span className="text-slate-400"> · {formatUsd(tokenOut, outputAmount)}</span>}
+                </div>
+              </div>
+
+              {estimate && (estimate.stopLimit || estimate.fees?.length > 0) && (
+                <dl className="mt-4 space-y-2 rounded-2xl border border-slate-200 p-4 text-sm">
+                  {estimate.stopLimit && (
+                    <DetailRow label="Minimum received" value={`${estimate.stopLimit.amount} ${estimate.stopLimit.token}`} />
+                  )}
+                  {(estimate.fees || []).map((fee) => (
+                    <DetailRow
+                      key={`${fee.type}-${fee.token}`}
+                      label={FEE_LABELS[fee.type] || "Fee"}
+                      value={`${Number(fee.amount).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${fee.token}`}
+                    />
+                  ))}
+                </dl>
+              )}
+
+              <div className="mt-4">
+                {busy ? (
+                  <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
+                ) : (
+                  <PrimaryButton onClick={confirmSwap} disabled={status !== "ready" || insufficient}>
+                    {buttonLabel}
+                  </PrimaryButton>
                 )}
               </div>
 
-              {estimate && (
-                <div className="space-y-1 text-xs text-slate-500">
-                  {estimate.stopLimit && (
-                    <p>Minimum received: {estimate.stopLimit.amount} {estimate.stopLimit.token}</p>
-                  )}
-                  {estimate.fees?.length > 0 && (
-                    <p>Fees: {estimate.fees.map((fee) => `${fee.amount} ${fee.token} (${fee.type})`).join(", ")}</p>
-                  )}
-                </div>
-              )}
-
-              {status === "swapping" ? (
-                <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
-              ) : (
-                <PrimaryButton
-                  onClick={confirmSwap}
-                  disabled={status !== "ready"}
-                >
-                  {status === "estimating" ? "Getting quote..." : !amountIn ? "Enter an amount" : "Swap"}
-                </PrimaryButton>
-              )}
-
               {status === "error" && (
-                <div>
-                  <p className="rounded-xl bg-red-50 p-4 text-red-700">{message}</p>
+                <div className="mt-4">
+                  <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{message}</p>
                   <div className="mt-3">
                     <PrimaryButton onClick={() => setStatus("idle")}>Try again</PrimaryButton>
                   </div>
@@ -509,25 +526,27 @@ export default function Swap() {
               )}
 
               {status === "done" && (
-                <div>
-                  <p className="rounded-xl bg-green-50 p-4 text-green-800">
-                    ✓ Swap submitted.
-                    {txHash && (
-                      <>
-                        {" "}
-                        <a
-                          href={`${network.explorerBase}/tx/${txHash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline"
-                        >
-                          View on explorer
-                        </a>
-                      </>
-                    )}
-                  </p>
-                </div>
+                <p className="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800">
+                  ✓ Swap submitted.
+                  {txHash && (
+                    <>
+                      {" "}
+                      <a
+                        href={`${network.explorerBase}/tx/${txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        View on explorer
+                      </a>
+                    </>
+                  )}
+                </p>
               )}
+
+              <p className="mt-4 text-center text-xs text-slate-400">
+                Your wallet signs the swap itself — ProofPay never holds your funds.
+              </p>
             </div>
           )}
         </div>
