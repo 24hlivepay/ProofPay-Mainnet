@@ -347,13 +347,19 @@ export default function Bridge() {
 
   // Most wallets only know the big chains out of the box. If the source
   // chain is missing, add it from the SDK's own definition before the SDK
-  // asks the wallet to switch to it.
+  // asks the wallet to switch to it. EIP-3085 says a missing chain comes
+  // back as error code 4902, which MetaMask follows -- but Rabby answers
+  // with a plain "Unrecognized chain ID" message and no 4902 code
+  // (confirmed live: it switched straight to Arbitrum/Avalanche, which it
+  // already had, but rejected Optimism/Polygon this way), so the code check
+  // alone missed it. Treat that message the same as 4902.
   async function ensureSourceChain(provider) {
     const chainHex = `0x${sourceInfo.chainId.toString(16)}`;
     try {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
     } catch (error) {
-      if (error?.code !== 4902) throw error;
+      const isMissingChain = error?.code === 4902 || /unrecognized chain|unknown chain/i.test(error?.message || "");
+      if (!isMissingChain) throw error;
       await provider.request({
         method: "wallet_addEthereumChain",
         params: [{
