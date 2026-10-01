@@ -8,6 +8,7 @@ import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
+import SuccessPanel from "../components/SuccessPanel";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -71,6 +72,14 @@ const CHAIN_INFO = Object.fromEntries(
 );
 
 const kit = new AppKit();
+
+// Plain names for the SDK's step names on the success screen.
+const STEP_LABELS = {
+  approve: "Approval",
+  burn: "Sent from source chain",
+  transfer: "Sent from source chain",
+  mint: "Delivered on destination chain",
+};
 
 // The page promises "the amount you type is the amount that arrives", with
 // the bridge fee paid on top. How that is achieved depends on the route:
@@ -142,6 +151,9 @@ export default function Bridge() {
   const [message, setMessage] = useState("");
   const [steps, setSteps] = useState([]);
   const [failedResult, setFailedResult] = useState(null);
+  // What the finished bridge moved, kept for the success screen after the
+  // form itself has been cleared.
+  const [receipt, setReceipt] = useState(null);
   const [balances, setBalances] = useState({});
   // True while a bridge is in flight. A ref, not state: a second click that
   // lands before React re-renders the disabled button would otherwise start
@@ -388,6 +400,15 @@ export default function Bridge() {
         return;
       }
 
+      const done = summarizeQuote(estimate, token, amount);
+      setReceipt({
+        token,
+        sourceName: sourceInfo.name,
+        destinationName: destinationInfo.name,
+        sent: done ? done.walletTotal : Number(result?.amount || amount),
+        received: done ? done.receive : null,
+        steps: (result?.steps || []).filter((step) => step.explorerUrl),
+      });
       setStatus("done");
       setMessage("");
       setAmount("");
@@ -516,6 +537,25 @@ export default function Bridge() {
               Bridge works with browser wallets like MetaMask for now. Support for email sign-in
               wallets is coming later.
             </p>
+          ) : status === "done" && receipt ? (
+            <SuccessPanel
+              title="Bridge complete"
+              subtitle={`Your ${receipt.token} is on ${receipt.destinationName}.`}
+              rows={[
+                { label: "Sent", value: `${trimAmount(receipt.sent)} ${receipt.token}`, note: `from ${receipt.sourceName}` },
+                ...(receipt.received !== null
+                  ? [{ label: "Received", value: `${trimAmount(receipt.received)} ${receipt.token}`, note: `on ${receipt.destinationName}` }]
+                  : []),
+                { label: "Recipient", value: shortAddress, note: "your wallet" },
+              ]}
+              links={receipt.steps.map((step) => ({ label: STEP_LABELS[step.name.toLowerCase()] || step.name, href: step.explorerUrl }))}
+              doneLabel="Bridge again"
+              onDone={() => {
+                setReceipt(null);
+                setSteps([]);
+                setStatus("idle");
+              }}
+            />
           ) : (
             <div className="mt-5">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 focus-within:border-blue-500">
@@ -651,12 +691,6 @@ export default function Bridge() {
                     )}
                   </div>
                 </div>
-              )}
-
-              {status === "done" && (
-                <p className="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800">
-                  ✓ Bridge complete. Your {token} is on {destinationInfo.name}.
-                </p>
               )}
 
               {steps.length > 0 && (

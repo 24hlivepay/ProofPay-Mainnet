@@ -7,6 +7,7 @@ import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
+import SuccessPanel from "../components/SuccessPanel";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -99,6 +100,9 @@ export default function Swap() {
   const [estimate, setEstimate] = useState(null);
   const [message, setMessage] = useState("");
   const [txHash, setTxHash] = useState("");
+  // What the finished swap moved, kept for the success screen after the form
+  // itself has been cleared.
+  const [receipt, setReceipt] = useState(null);
   const [balances, setBalances] = useState({});
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [prices, setPrices] = useState({});
@@ -379,6 +383,7 @@ export default function Swap() {
       if (isCircleWallet) {
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
+        setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
         setStatus("done");
         setAmountIn("");
         setEstimate(null);
@@ -389,6 +394,7 @@ export default function Swap() {
       const adapter = await buildAdapter();
       const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
       setTxHash(result?.transactionHash || result?.hash || "");
+      setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
       setStatus("done");
       setAmountIn("");
       setEstimate(null);
@@ -449,6 +455,24 @@ export default function Swap() {
             <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
               Connect your wallet first, then come back to this page.
             </p>
+          ) : status === "done" && receipt ? (
+            <SuccessPanel
+              title="Swap complete"
+              subtitle={`Your ${receipt.tokenOut} is in your wallet on ${network.chainName}.`}
+              rows={[
+                { label: "Paid", value: `${receipt.paid} ${receipt.tokenIn}` },
+                ...(receipt.received
+                  ? [{ label: "Received", value: `${receipt.received} ${receipt.tokenOut}`, note: "quoted amount" }]
+                  : []),
+              ]}
+              links={txHash ? [{ label: "Swap transaction", href: `${network.explorerBase}/tx/${txHash}` }] : []}
+              doneLabel="Swap again"
+              onDone={() => {
+                setReceipt(null);
+                setTxHash("");
+                setStatus("idle");
+              }}
+            />
           ) : (
             <div className="mt-5">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 focus-within:border-blue-500">
@@ -553,25 +577,6 @@ export default function Swap() {
                     <PrimaryButton onClick={() => setStatus("idle")}>Try again</PrimaryButton>
                   </div>
                 </div>
-              )}
-
-              {status === "done" && (
-                <p className="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800">
-                  ✓ Swap submitted.
-                  {txHash && (
-                    <>
-                      {" "}
-                      <a
-                        href={`${network.explorerBase}/tx/${txHash}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        View on explorer
-                      </a>
-                    </>
-                  )}
-                </p>
               )}
 
               <p className="mt-4 text-center text-xs text-slate-400">
