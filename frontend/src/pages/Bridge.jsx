@@ -252,8 +252,19 @@ export default function Bridge() {
     const mode = feeMode(token, sourceChain === routes.arc, network.id);
 
     if (mode === "sourcePaid") {
-      const params = buildBridgeParams(adapter, amount, { feePayment: "source" });
-      return { mode, params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
+      try {
+        const params = buildBridgeParams(adapter, amount, { feePayment: "source" });
+        return { mode, params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
+      } catch (error) {
+        // Not every source chain supports feePayment "source" (confirmed
+        // working on Base Sepolia; Avalanche Fuji and others reject it with
+        // this exact validation error). Fall back to the SDK's default
+        // destination-paid fees, which every chain supports, rather than
+        // failing the bridge outright.
+        if (!/feePayment/i.test(error?.message || "")) throw error;
+        const params = buildBridgeParams(adapter, amount);
+        return { mode: "deducted", params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
+      }
     }
 
     if (mode === "grossUp") {
