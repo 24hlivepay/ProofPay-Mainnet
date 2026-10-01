@@ -56,6 +56,11 @@ const BRIDGE_ROUTES = {
 // mainnet off again without touching testnet.
 const BRIDGE_MAINNET_ENABLED = true;
 
+// "The amount typed is the amount that arrives" changes which SDK path
+// signs the transfer. It runs on testnet first; mainnet keeps the default
+// fee handling until a real wallet-signed bridge has confirmed it there.
+const RECEIVE_EXACT_MAINNET_ENABLED = false;
+
 // The SDK ships a definition for every chain it supports (chain id, public
 // RPC, USDC and EURC addresses, explorer). Indexed by its `chain` identifier -- the same
 // string kit.bridge() takes -- so nothing here is a hand-copied address.
@@ -78,8 +83,12 @@ const kit = new AppKit();
 //               sent: type 10, send 10.05, 10 arrives.
 //   quoted      EURC (CCTPx). The fee is already quoted in the source
 //               chain's gas token and paid on top; nothing to adjust.
-function feeMode(token, sourceIsArc) {
+//   deducted    USDC the default way: the fee comes out of what arrives.
+//               Used on mainnet until receive-exact has been confirmed with
+//               a real wallet on testnet.
+function feeMode(token, sourceIsArc, networkId) {
   if (token !== "USDC") return "quoted";
+  if (networkId === "mainnet" && !RECEIVE_EXACT_MAINNET_ENABLED) return "deducted";
   return sourceIsArc ? "grossUp" : "sourcePaid";
 }
 
@@ -230,7 +239,7 @@ export default function Bridge() {
   // Quotes the bridge so that `amount` is what arrives (see feeMode()).
   // Returns the params to hand to kit.bridge() along with the estimate.
   async function quoteBridge(adapter) {
-    const mode = feeMode(token, sourceChain === routes.arc);
+    const mode = feeMode(token, sourceChain === routes.arc, network.id);
 
     if (mode === "sourcePaid") {
       const params = buildBridgeParams(adapter, amount, { feePayment: "source" });
@@ -278,6 +287,11 @@ export default function Bridge() {
       }
 
       setEstimate(quote);
+      if (summary.receive <= 0) {
+        setStatus("error");
+        setMessage(`This amount is smaller than the bridge fee. Enter a larger amount.`);
+        return;
+      }
       setStatus("ready");
     } catch (error) {
       setStatus("error");
@@ -588,7 +602,11 @@ export default function Bridge() {
                       key={`${fee.type}-${fee.token}`}
                       label={fee.type === "provider" && summary.fees.length > 1 ? "Transfer fee" : "Bridge fee"}
                       value={`${trimAmount(fee.amount, 8)} ${fee.token}`}
-                      note={`added on top, paid from your wallet on ${sourceInfo.name}`}
+                      note={
+                        estimate.mode === "deducted"
+                          ? "taken from the amount that arrives"
+                          : `added on top, paid from your wallet on ${sourceInfo.name}`
+                      }
                     />
                   ))}
                   {summary.walletTotal > Number(amount) && (
