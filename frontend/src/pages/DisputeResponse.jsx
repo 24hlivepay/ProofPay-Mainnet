@@ -87,7 +87,7 @@ export default function DisputeResponse() {
   const title = canRespond ? "Respond to dispute" : "Dispute case";
 
   return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
-    <button onClick={() => navigate(-1)} className="text-sm font-semibold text-blue-700">← Back to active orders</button>
+    <button onClick={() => navigate(-1)} className="text-sm font-semibold text-blue-700">← Back</button>
     <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
       <p className="mt-2 text-slate-600">{order.escrowId} · Funds stay locked in the escrow contract until ProofPay admin resolves the case.</p>

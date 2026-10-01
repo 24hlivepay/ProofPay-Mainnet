@@ -491,7 +491,7 @@ export default function Bridge() {
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
         <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
-          ← Back to Dashboard
+          ← Back
         </button>
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h1 className="sr-only">Bridge</h1>
