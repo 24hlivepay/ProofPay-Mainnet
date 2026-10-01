@@ -105,7 +105,7 @@ export default function Navbar({ walletSlot }) {
         <div className="flex items-center justify-between gap-4">
           <button
             type="button"
-            onClick={() => navigate("/wallet")}
+            onClick={() => navigate("/dashboard")}
             className="flex shrink-0 items-center gap-3 text-left"
           >
             <ProofPayLogo className="h-9 w-9" />
