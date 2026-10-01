@@ -337,14 +337,6 @@ export default function Home() {
           {walletStatus && <p className="mt-3 rounded-xl bg-green-50 p-3 text-sm text-green-700">{walletStatus}</p>}
         </div>
 
-        {!mode && (
-          <LiveEscrowOverview
-            stats={networkStats}
-            statsError={networkStatsError}
-            onFaucetClick={() => window.open(CIRCLE_FAUCET_URL, "_blank", "noopener,noreferrer")}
-          />
-        )}
-
         {!mode && isDisputeAdmin && openDisputeCount > 0 && (
           <button
             type="button"
@@ -383,16 +375,25 @@ export default function Home() {
             </div>
 
             {activeGroup === "escrows" && (
-              <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${isDisputeAdmin ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
-                {isDisputeAdmin ? (
-                  <WorkspaceCard icon="🛡️" title="Admin Disputes" description="Review evidence from both sides and settle disputed escrows on-chain." badge={openDisputeCount} onClick={() => navigate("/admin/disputes")} />
-                ) : (
-                  <>
-                    <WorkspaceCard icon="🛒" title="Buying Escrows" description="Create a secure escrow, deposit a supported asset, and release payment after delivery." onClick={() => navigate("/dashboard/buying")} />
-                    <WorkspaceCard icon="🏪" title="Selling Escrows" description="See accepted sales, confirm delivery, and track payments received." onClick={() => navigate("/dashboard/selling")} />
-                  </>
-                )}
-              </div>
+              <>
+                <div className="mt-5">
+                  <LiveEscrowOverview
+                    stats={networkStats}
+                    statsError={networkStatsError}
+                    onFaucetClick={() => window.open(CIRCLE_FAUCET_URL, "_blank", "noopener,noreferrer")}
+                  />
+                </div>
+                <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${isDisputeAdmin ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
+                  {isDisputeAdmin ? (
+                    <WorkspaceCard icon="🛡️" title="Admin Disputes" description="Review evidence from both sides and settle disputed escrows on-chain." badge={openDisputeCount} onClick={() => navigate("/admin/disputes")} />
+                  ) : (
+                    <>
+                      <WorkspaceCard icon="🛒" title="Buying Escrows" description="Create a secure escrow, deposit a supported asset, and release payment after delivery." onClick={() => navigate("/dashboard/buying")} />
+                      <WorkspaceCard icon="🏪" title="Selling Escrows" description="See accepted sales, confirm delivery, and track payments received." onClick={() => navigate("/dashboard/selling")} />
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
