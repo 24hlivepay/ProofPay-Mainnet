@@ -13,40 +13,49 @@ import { getNetworkConfig } from "../config/network";
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
 // Bridge is an App Kit SDK capability (same package Swap and Onramp use) on
-// top of Circle's CCTP: USDC is burned on the source chain and minted on the
-// destination chain, so there is no wrapped token and no liquidity pool.
-// EOA wallets only for now -- the connected wallet's own provider becomes a
-// Viem adapter and signs the approve + burn on the source chain. Circle
-// (email sign-in) wallets need a server-side flow like Swap's and are not
-// wired up yet.
+// top of Circle's CCTP: the token is burned on the source chain and minted
+// on the destination chain, so there is no wrapped token and no liquidity
+// pool. EOA wallets only for now -- the connected wallet's own provider
+// becomes a Viem adapter and signs the approve + transfer on the source
+// chain. Circle (email sign-in) wallets need a server-side flow like Swap's
+// and are not wired up yet.
 //
-// Every route here was checked with kit.estimateBridge() against both
-// networks before being listed (Arc <-> each chain, forwarder on).
+// USDC routes through CCTP v2. EURC routes through CCTPx, which only exists
+// where Circle issues EURC, so it has fewer chains. Every route here was
+// checked with kit.estimateBridge() against both networks before being
+// listed (Arc <-> each chain, forwarder on).
+const BRIDGE_TOKENS = ["USDC", "EURC"];
 const BRIDGE_ROUTES = {
   mainnet: {
     arc: "Arc",
-    others: ["Ethereum", "Base", "Arbitrum", "Optimism", "Polygon", "Avalanche"],
+    chains: {
+      USDC: ["Ethereum", "Base", "Arbitrum", "Optimism", "Polygon", "Avalanche"],
+      EURC: ["Ethereum", "Base", "Avalanche"],
+    },
   },
   testnet: {
     arc: "Arc_Testnet",
-    others: [
-      "Ethereum_Sepolia",
-      "Base_Sepolia",
-      "Arbitrum_Sepolia",
-      "Optimism_Sepolia",
-      "Polygon_Amoy_Testnet",
-      "Avalanche_Fuji",
-    ],
+    chains: {
+      USDC: [
+        "Ethereum_Sepolia",
+        "Base_Sepolia",
+        "Arbitrum_Sepolia",
+        "Optimism_Sepolia",
+        "Polygon_Amoy_Testnet",
+        "Avalanche_Fuji",
+      ],
+      EURC: ["Ethereum_Sepolia", "Base_Sepolia", "Avalanche_Fuji"],
+    },
   },
 };
 
-// A real wallet-signed bridge has only been exercised on testnet so far.
-// Mainnet moves real funds, so it stays off until a full testnet bridge has
-// been confirmed end to end -- flip this to true to turn it on.
-const BRIDGE_MAINNET_ENABLED = false;
+// Mainnet was held back until a real wallet-signed bridge was confirmed end
+// to end on testnet (USDC, 2026-10-01). Set this back to false to switch
+// mainnet off again without touching testnet.
+const BRIDGE_MAINNET_ENABLED = true;
 
 // The SDK ships a definition for every chain it supports (chain id, public
-// RPC, USDC address, explorer). Indexed by its `chain` identifier -- the same
+// RPC, USDC and EURC addresses, explorer). Indexed by its `chain` identifier -- the same
 // string kit.bridge() takes -- so nothing here is a hand-copied address.
 const CHAIN_INFO = Object.fromEntries(
   Object.values(SDK_CHAINS)
@@ -56,10 +65,17 @@ const CHAIN_INFO = Object.fromEntries(
 
 const kit = new AppKit();
 
-function sumUsdcFees(estimate) {
-  return (estimate?.fees || [])
-    .filter((fee) => fee.token === "USDC")
+// A fee quoted in the bridged token comes out of the amount that arrives
+// (USDC's forwarder fee). A fee quoted in anything else is paid on top, from
+// the wallet on the source chain (EURC's fee is in the source chain's gas
+// token: ETH on Base, USDC on Arc).
+function splitFees(estimate, token) {
+  const fees = estimate?.fees || [];
+  const deducted = fees
+    .filter((fee) => fee.token === token)
     .reduce((total, fee) => total + Number(fee.amount || 0), 0);
+  const extra = fees.filter((fee) => fee.token !== token && Number(fee.amount || 0) > 0);
+  return { deducted, extra };
 }
 
 function trimAmount(value, digits = 6) {
@@ -74,7 +90,8 @@ export default function Bridge() {
   const isCircleWallet = (localStorage.getItem("proofpay-wallet-type") || "metamask") === "circle";
   const mainnetLocked = network.id === "mainnet" && !BRIDGE_MAINNET_ENABLED;
   const [direction, setDirection] = useState("toArc"); // toArc | fromArc
-  const [otherChain, setOtherChain] = useState(routes.others[1]);
+  const [token, setToken] = useState("USDC");
+  const [otherChain, setOtherChain] = useState(routes.chains.USDC[1]);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("idle"); // idle | estimating | ready | bridging | done | error
   const [estimate, setEstimate] = useState(null);
@@ -92,16 +109,17 @@ export default function Bridge() {
   async function loadBalance(chain) {
     if (!walletAddress) return;
     const info = CHAIN_INFO[chain];
-    if (!info) return;
+    const tokenAddress = token === "EURC" ? info?.eurcAddress : info?.usdcAddress;
+    if (!info || !tokenAddress) return;
     try {
       const provider = new JsonRpcProvider(info.rpcEndpoints[0], info.chainId, { staticNetwork: true });
       // USDC is Arc's native gas currency (18 decimals, getBalance), not a
-      // regular ERC20 -- see network.js' nativeCurrency. Everywhere else it
-      // is the usual 6-decimal ERC20.
-      const value = chain === routes.arc
+      // regular ERC20 -- see network.js' nativeCurrency. Everything else
+      // here (USDC off Arc, EURC everywhere) is a 6-decimal ERC20.
+      const value = chain === routes.arc && token === "USDC"
         ? formatUnits(await provider.getBalance(walletAddress), 18)
-        : formatUnits(await new Contract(info.usdcAddress, BALANCE_ABI, provider).balanceOf(walletAddress), 6);
-      setBalances((current) => ({ ...current, [chain]: value }));
+        : formatUnits(await new Contract(tokenAddress, BALANCE_ABI, provider).balanceOf(walletAddress), 6);
+      setBalances((current) => ({ ...current, [`${chain}:${token}`]: value }));
     } catch {
       // Balance display is a convenience -- the bridge itself still works
       // if a public RPC is slow or rate-limited.
@@ -111,7 +129,7 @@ export default function Bridge() {
   useEffect(() => {
     loadBalance(sourceChain);
     loadBalance(destinationChain);
-  }, [walletAddress, sourceChain, destinationChain]);
+  }, [walletAddress, sourceChain, destinationChain, token]);
 
   function resetQuote() {
     setEstimate(null);
@@ -119,12 +137,22 @@ export default function Bridge() {
     setMessage("");
   }
 
+  function changeToken(nextToken) {
+    setToken(nextToken);
+    // EURC exists on fewer chains than USDC -- keep the chain if the new
+    // token supports it, otherwise fall back to the first one that does.
+    if (!routes.chains[nextToken].includes(otherChain)) {
+      setOtherChain(routes.chains[nextToken][0]);
+    }
+    resetQuote();
+  }
+
   function fillMaxAmount() {
-    const raw = Number(balances[sourceChain] || 0);
+    const raw = Number(balances[`${sourceChain}:${token}`] || 0);
     if (raw <= 0) return;
-    // Leaving Arc, gas is paid in USDC out of the same balance -- keep a
+    // Leaving Arc with USDC, gas is paid out of the same balance -- keep a
     // small reserve (same reasoning as Swap's Max button).
-    const reserve = sourceChain === routes.arc ? Math.min(0.05, raw / 2) : 0;
+    const reserve = sourceChain === routes.arc && token === "USDC" ? Math.min(0.05, raw / 2) : 0;
     setAmount(String(Math.max(raw - reserve, 0)));
     resetQuote();
   }
@@ -142,11 +170,10 @@ export default function Bridge() {
       from: { adapter, chain: sourceChain },
       // Forwarder-only destination: Circle's relayer submits the mint, so
       // the user never needs gas on the destination chain and the wallet
-      // only ever signs on the source chain. The relay fee comes out of the
-      // amount that arrives.
+      // only ever signs on the source chain.
       to: { chain: destinationChain, recipientAddress: walletAddress, useForwarder: true },
       amount,
-      token: "USDC",
+      token,
       // Plain approve -> burn. EIP-5792 batching behaves differently from
       // wallet to wallet; the sequential flow is the predictable one.
       config: { batchTransactions: false },
@@ -160,9 +187,10 @@ export default function Bridge() {
       const { adapter } = await buildAdapter();
       const result = await kit.estimateBridge(buildBridgeParams(adapter));
       setEstimate(result);
-      if (Number(amount) <= sumUsdcFees(result)) {
+      const { deducted } = splitFees(result, token);
+      if (Number(amount) <= deducted) {
         setStatus("error");
-        setMessage(`This amount is smaller than the bridge fee (${trimAmount(sumUsdcFees(result))} USDC). Enter a larger amount.`);
+        setMessage(`This amount is smaller than the bridge fee (${trimAmount(deducted)} ${token}). Enter a larger amount.`);
         return;
       }
       setStatus("ready");
@@ -186,7 +214,7 @@ export default function Bridge() {
       getEstimate();
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [amount, direction, otherChain, walletAddress, isCircleWallet]);
+  }, [amount, direction, otherChain, token, walletAddress, isCircleWallet]);
 
   // Most wallets only know the big chains out of the box. If the source
   // chain is missing, add it from the SDK's own definition before the SDK
@@ -212,11 +240,13 @@ export default function Bridge() {
   }
 
   function describeStep(method) {
+    const confirm = `Confirm the transfer in your wallet (${sourceInfo.name})...`;
     const labels = {
-      approve: `Approve USDC in your wallet (${sourceInfo.name})...`,
-      burn: `Confirm the transfer in your wallet (${sourceInfo.name})...`,
+      approve: `Approve ${token} in your wallet (${sourceInfo.name})...`,
+      burn: confirm,
+      transfer: confirm,
       fetchAttestation: "Waiting for Circle to confirm the transfer...",
-      mint: `Delivering USDC on ${destinationInfo.name}...`,
+      mint: `Delivering ${token} on ${destinationInfo.name}...`,
     };
     return labels[method] || "Working on your bridge...";
   }
@@ -244,11 +274,11 @@ export default function Bridge() {
 
       if (result?.state === "error") {
         setFailedResult(result);
-        const burned = (result.steps || []).some((step) => /burn/i.test(step.name) && step.state === "success");
+        const burned = (result.steps || []).some((step) => /burn|transfer/i.test(step.name) && step.state === "success");
         setStatus("error");
         setMessage(
           burned
-            ? `Your USDC left ${sourceInfo.name} but has not arrived on ${destinationInfo.name} yet. Your funds are not lost. Press Retry to finish the delivery.`
+            ? `Your ${token} left ${sourceInfo.name} but has not arrived on ${destinationInfo.name} yet. Your funds are not lost. Press Retry to finish the delivery.`
             : "The bridge did not go through. Nothing was sent."
         );
         return;
@@ -282,10 +312,10 @@ export default function Bridge() {
   const confirmBridge = () => runBridge((adapter) => kit.bridge(buildBridgeParams(adapter)));
   const retryBridge = () => runBridge((adapter) => kit.retryBridge(failedResult, { from: adapter, to: adapter }));
 
-  const totalUsdcFees = sumUsdcFees(estimate);
-  const receiveAmount = estimate ? Math.max(Number(amount) - totalUsdcFees, 0) : null;
-  const sourceBalance = balances[sourceChain];
-  const destinationBalance = balances[destinationChain];
+  const { deducted: deductedFee, extra: extraFees } = splitFees(estimate, token);
+  const receiveAmount = estimate ? Math.max(Number(amount) - deductedFee, 0) : null;
+  const sourceBalance = balances[`${sourceChain}:${token}`];
+  const destinationBalance = balances[`${destinationChain}:${token}`];
   const sourceGas = (estimate?.gasFees || [])
     .reduce((total, gas) => total + Number(gas?.fees?.fee || 0), 0);
 
@@ -298,7 +328,7 @@ export default function Bridge() {
       }}
       className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
     >
-      {routes.others.map((chain) => (
+      {routes.chains[token].map((chain) => (
         <option key={chain} value={chain}>{CHAIN_INFO[chain]?.name || chain}</option>
       ))}
     </select>
@@ -319,8 +349,8 @@ export default function Bridge() {
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <h1 className="text-3xl font-bold text-slate-900">Bridge</h1>
           <p className="mt-2 text-slate-600">
-            Move USDC between {network.chainName} and other blockchains with Circle's CCTP. Your
-            wallet signs the transfer itself — ProofPay never holds your funds.
+            Move USDC and EURC between {network.chainName} and other blockchains with Circle's
+            CCTP. Your wallet signs the transfer itself — ProofPay never holds your funds.
           </p>
 
           {mainnetLocked ? (
@@ -373,7 +403,7 @@ export default function Bridge() {
                       onClick={fillMaxAmount}
                       className="text-xs font-semibold text-blue-700 hover:underline"
                     >
-                      Balance: {trimAmount(sourceBalance, 4)} USDC · Max
+                      Balance: {trimAmount(sourceBalance, 4)} {token} · Max
                     </button>
                   )}
                 </div>
@@ -390,7 +420,15 @@ export default function Bridge() {
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg focus:border-blue-500 focus:outline-none"
                   />
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-700">USDC</div>
+                  <select
+                    value={token}
+                    onChange={(event) => changeToken(event.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+                  >
+                    {BRIDGE_TOKENS.map((symbol) => (
+                      <option key={symbol} value={symbol}>{symbol}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -399,7 +437,7 @@ export default function Bridge() {
                   <label className="text-sm font-semibold text-slate-700">You receive</label>
                   {destinationBalance !== undefined && (
                     <span className="text-xs text-slate-500">
-                      Balance: {trimAmount(destinationBalance, 4)} USDC
+                      Balance: {trimAmount(destinationBalance, 4)} {token}
                     </span>
                   )}
                 </div>
@@ -411,13 +449,20 @@ export default function Bridge() {
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg text-slate-600"
                   />
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-700">USDC</div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-700">{token}</div>
                 </div>
               </div>
 
               {estimate && (
                 <div className="space-y-1 text-xs text-slate-500">
-                  <p>Bridge fee: {trimAmount(totalUsdcFees)} USDC (taken from the amount that arrives)</p>
+                  {deductedFee > 0 && (
+                    <p>Bridge fee: {trimAmount(deductedFee)} {token} (taken from the amount that arrives)</p>
+                  )}
+                  {extraFees.map((fee) => (
+                    <p key={`${fee.type}-${fee.token}`}>
+                      Bridge fee: {trimAmount(fee.amount, 8)} {fee.token} (paid from your wallet on {sourceInfo.name})
+                    </p>
+                  ))}
                   {sourceGas > 0 && (
                     <p>Network fee on {sourceInfo.name}: about {trimAmount(sourceGas, 8)} {sourceGasToken}</p>
                   )}
@@ -427,7 +472,7 @@ export default function Bridge() {
 
               {sourceChain !== routes.arc && (
                 <p className="text-xs text-slate-500">
-                  You need a little {sourceGasToken} on {sourceInfo.name} to pay its network fee. Your
+                  You need a little {sourceGasToken} on {sourceInfo.name} to pay its fees. Your
                   wallet will switch to {sourceInfo.name} for this transfer and back to {network.chainName} after.
                 </p>
               )}
@@ -455,7 +500,7 @@ export default function Bridge() {
 
               {status === "done" && (
                 <p className="rounded-xl bg-green-50 p-4 text-green-800">
-                  ✓ Bridge complete. Your USDC is on {destinationInfo.name}.
+                  ✓ Bridge complete. Your {token} is on {destinationInfo.name}.
                 </p>
               )}
 
