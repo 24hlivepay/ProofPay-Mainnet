@@ -29,7 +29,11 @@ export const NETWORKS = {
     chainHex: "0x4cef52",
     chainName: "Arc Testnet",
     rpcUrl: "https://rpc.testnet.arc.network",
-    explorerBase: "https://testnet.arcscan.app",
+    // testnet.arcscan.app now 301-redirects here, and that redirect fails
+    // in-browser (fetch TypeError: Failed to fetch) even though it works
+    // fine with curl -- confirmed live, 2026-10-01. Point at the real host
+    // directly so wallet balances, prices, and explorer links don't break.
+    explorerBase: "https://explorer.testnet.arc.io",
     nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
     circleBlockchain: "ARC-TESTNET",
     // Falls back to the original VITE_CIRCLE_APP_ID name so the existing
