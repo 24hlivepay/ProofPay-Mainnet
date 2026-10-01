@@ -40,6 +40,11 @@ const BRIDGE_ROUTES = {
   },
 };
 
+// A real wallet-signed bridge has only been exercised on testnet so far.
+// Mainnet moves real funds, so it stays off until a full testnet bridge has
+// been confirmed end to end -- flip this to true to turn it on.
+const BRIDGE_MAINNET_ENABLED = false;
+
 // The SDK ships a definition for every chain it supports (chain id, public
 // RPC, USDC address, explorer). Indexed by its `chain` identifier -- the same
 // string kit.bridge() takes -- so nothing here is a hand-copied address.
@@ -67,6 +72,7 @@ export default function Bridge() {
   const network = getNetworkConfig();
   const routes = BRIDGE_ROUTES[network.id];
   const isCircleWallet = (localStorage.getItem("proofpay-wallet-type") || "metamask") === "circle";
+  const mainnetLocked = network.id === "mainnet" && !BRIDGE_MAINNET_ENABLED;
   const [direction, setDirection] = useState("toArc"); // toArc | fromArc
   const [otherChain, setOtherChain] = useState(routes.others[1]);
   const [amount, setAmount] = useState("");
@@ -170,7 +176,7 @@ export default function Bridge() {
   // estimate only reads from public RPCs -- it never asks the wallet to
   // switch networks.
   useEffect(() => {
-    if (!amount || Number(amount) <= 0 || !walletAddress || isCircleWallet) {
+    if (!amount || Number(amount) <= 0 || !walletAddress || isCircleWallet || mainnetLocked) {
       setEstimate(null);
       if (status !== "bridging" && status !== "done") setStatus("idle");
       return undefined;
@@ -317,7 +323,12 @@ export default function Bridge() {
             wallet signs the transfer itself — ProofPay never holds your funds.
           </p>
 
-          {!walletAddress ? (
+          {mainnetLocked ? (
+            <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
+              Bridge is being tested on Arc Testnet first and will open on Arc Mainnet soon. Switch
+              to Arc Testnet at the top of the page to try it.
+            </p>
+          ) : !walletAddress ? (
             <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
               Connect your wallet first, then come back to this page.
             </p>
