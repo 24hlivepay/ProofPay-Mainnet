@@ -319,23 +319,38 @@ export default function Bridge() {
   const sourceGas = (estimate?.gasFees || [])
     .reduce((total, gas) => total + Number(gas?.fees?.fee || 0), 0);
 
-  const chainSelect = (
-    <select
-      value={otherChain}
-      onChange={(event) => {
-        setOtherChain(event.target.value);
-        resetQuote();
-      }}
-      className="w-full rounded-xl border border-slate-300 px-3 py-3 font-semibold"
-    >
-      {routes.chains[token].map((chain) => (
-        <option key={chain} value={chain}>{CHAIN_INFO[chain]?.name || chain}</option>
-      ))}
-    </select>
+  const insufficient = sourceBalance !== undefined && Number(amount) > Number(sourceBalance);
+  const busy = status === "bridging";
+  const shortAddress = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "";
+
+  let buttonLabel = `Bridge ${trimAmount(amount || 0)} ${token}`;
+  if (!amount || Number(amount) <= 0) buttonLabel = "Enter an amount";
+  else if (insufficient) buttonLabel = `Not enough ${token} on ${sourceInfo.name}`;
+  else if (status === "estimating") buttonLabel = "Getting quote...";
+
+  const chainPicker = (
+    <div className="flex items-center gap-2">
+      <ChainDot chain={otherChain} />
+      <select
+        value={otherChain}
+        disabled={busy}
+        onChange={(event) => {
+          setOtherChain(event.target.value);
+          resetQuote();
+        }}
+        className="cursor-pointer rounded-lg bg-transparent py-1 pr-1 text-sm font-bold text-slate-900 focus:outline-none"
+        aria-label="Choose blockchain"
+      >
+        {routes.chains[token].map((chain) => (
+          <option key={chain} value={chain}>{CHAIN_INFO[chain]?.name || chain}</option>
+        ))}
+      </select>
+    </div>
   );
-  const arcBox = (
-    <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-semibold text-slate-700">
-      {network.chainName}
+  const arcLabel = (
+    <div className="flex items-center gap-2">
+      <ChainDot chain={routes.arc} />
+      <span className="py-1 text-sm font-bold text-slate-900">{network.chainName}</span>
     </div>
   );
 
@@ -346,12 +361,36 @@ export default function Bridge() {
         <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
           ← Back to Dashboard
         </button>
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h1 className="text-3xl font-bold text-slate-900">Bridge</h1>
-          <p className="mt-2 text-slate-600">
-            Move USDC and EURC between {network.chainName} and other blockchains with Circle's
-            CCTP. Your wallet signs the transfer itself — ProofPay never holds your funds.
-          </p>
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Bridge</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Move USDC and EURC between {network.chainName} and other blockchains.
+              </p>
+            </div>
+            {!mainnetLocked && walletAddress && !isCircleWallet && (
+              <div className="flex shrink-0 rounded-full bg-slate-100 p-1" role="tablist" aria-label="Token">
+                {BRIDGE_TOKENS.map((symbol) => (
+                  <button
+                    key={symbol}
+                    type="button"
+                    role="tab"
+                    aria-selected={token === symbol}
+                    disabled={busy}
+                    onClick={() => changeToken(symbol)}
+                    className={
+                      token === symbol
+                        ? "rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-900 shadow-sm"
+                        : "rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
+                    }
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {mainnetLocked ? (
             <p className="mt-6 rounded-xl bg-amber-50 p-4 text-amber-800">
@@ -368,126 +407,127 @@ export default function Bridge() {
               wallets is coming later.
             </p>
           ) : (
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="text-sm font-semibold text-slate-700">From</label>
-                <div className="mt-1">{direction === "toArc" ? chainSelect : arcBox}</div>
+            <div className="mt-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 focus-within:border-blue-500">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">From</span>
+                  {direction === "toArc" ? chainPicker : arcLabel}
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    value={amount}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setAmount(event.target.value);
+                      resetQuote();
+                    }}
+                    placeholder="0"
+                    aria-label="Amount to send"
+                    className="w-full min-w-0 [appearance:textfield] bg-transparent text-3xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                  <TokenBadge token={token} />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className={insufficient ? "font-semibold text-red-600" : "text-slate-500"}>
+                    Balance: {sourceBalance !== undefined ? trimAmount(sourceBalance, 4) : "..."} {token}
+                  </span>
+                  {Number(sourceBalance) > 0 && (
+                    <button
+                      type="button"
+                      onClick={fillMaxAmount}
+                      disabled={busy}
+                      className="rounded-full bg-blue-100 px-2.5 py-0.5 font-bold text-blue-700 hover:bg-blue-50"
+                    >
+                      Max
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex justify-center">
+              <div className="relative z-10 -my-3 flex justify-center">
                 <button
                   type="button"
                   onClick={() => {
                     setDirection(direction === "toArc" ? "fromArc" : "toArc");
                     resetQuote();
                   }}
-                  disabled={status === "bridging"}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-lg text-slate-500 hover:bg-slate-50"
+                  disabled={busy}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-600 shadow-sm hover:bg-slate-50"
                   aria-label="Reverse bridge direction"
                 >
                   ⇅
                 </button>
               </div>
 
-              <div>
-                <label className="text-sm font-semibold text-slate-700">To</label>
-                <div className="mt-1">{direction === "toArc" ? arcBox : chainSelect}</div>
-              </div>
-
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="text-sm font-semibold text-slate-700">You send</label>
-                  {sourceBalance !== undefined && (
-                    <button
-                      type="button"
-                      onClick={fillMaxAmount}
-                      className="text-xs font-semibold text-blue-700 hover:underline"
-                    >
-                      Balance: {trimAmount(sourceBalance, 4)} {token} · Max
-                    </button>
-                  )}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">To</span>
+                  {direction === "toArc" ? arcLabel : chainPicker}
                 </div>
-                <div className="mt-1 flex gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={amount}
-                    onChange={(event) => {
-                      setAmount(event.target.value);
-                      resetQuote();
-                    }}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg focus:border-blue-500 focus:outline-none"
-                  />
-                  <select
-                    value={token}
-                    onChange={(event) => changeToken(event.target.value)}
-                    className="rounded-xl border border-slate-300 px-3 py-3 font-semibold"
+                <div className="mt-3 flex items-center gap-3">
+                  <p
+                    className={`w-full min-w-0 truncate text-3xl font-semibold ${
+                      receiveAmount !== null ? "text-slate-900" : "text-slate-300"
+                    }`}
+                    aria-label="Amount you receive"
                   >
-                    {BRIDGE_TOKENS.map((symbol) => (
-                      <option key={symbol} value={symbol}>{symbol}</option>
-                    ))}
-                  </select>
+                    {receiveAmount !== null ? trimAmount(receiveAmount) : status === "estimating" ? "..." : "0"}
+                  </p>
+                  <TokenBadge token={token} />
                 </div>
-              </div>
-
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="text-sm font-semibold text-slate-700">You receive</label>
-                  {destinationBalance !== undefined && (
-                    <span className="text-xs text-slate-500">
-                      Balance: {trimAmount(destinationBalance, 4)} {token}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={receiveAmount !== null ? trimAmount(receiveAmount) : ""}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg text-slate-600"
-                  />
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-700">{token}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Balance: {destinationBalance !== undefined ? trimAmount(destinationBalance, 4) : "..."} {token}
                 </div>
               </div>
 
               {estimate && (
-                <div className="space-y-1 text-xs text-slate-500">
+                <dl className="mt-4 space-y-2 rounded-2xl border border-slate-200 p-4 text-sm">
                   {deductedFee > 0 && (
-                    <p>Bridge fee: {trimAmount(deductedFee)} {token} (taken from the amount that arrives)</p>
+                    <FeeRow label="Bridge fee" value={`${trimAmount(deductedFee)} ${token}`} note="taken from the amount that arrives" />
                   )}
                   {extraFees.map((fee) => (
-                    <p key={`${fee.type}-${fee.token}`}>
-                      Bridge fee: {trimAmount(fee.amount, 8)} {fee.token} (paid from your wallet on {sourceInfo.name})
-                    </p>
+                    <FeeRow
+                      key={`${fee.type}-${fee.token}`}
+                      label="Bridge fee"
+                      value={`${trimAmount(fee.amount, 8)} ${fee.token}`}
+                      note={`paid from your wallet on ${sourceInfo.name}`}
+                    />
                   ))}
                   {sourceGas > 0 && (
-                    <p>Network fee on {sourceInfo.name}: about {trimAmount(sourceGas, 8)} {sourceGasToken}</p>
+                    <FeeRow label="Network fee" value={`~${trimAmount(sourceGas, 8)} ${sourceGasToken}`} note={`on ${sourceInfo.name}`} />
                   )}
-                  <p>Arrives in your same wallet address on {destinationInfo.name}, usually within a few minutes.</p>
-                </div>
+                  <FeeRow label="Arrival time" value="A few minutes" />
+                  <FeeRow label="Recipient" value={shortAddress} note={`your wallet on ${destinationInfo.name}`} />
+                </dl>
               )}
 
               {sourceChain !== routes.arc && (
-                <p className="text-xs text-slate-500">
-                  You need a little {sourceGasToken} on {sourceInfo.name} to pay its fees. Your
-                  wallet will switch to {sourceInfo.name} for this transfer and back to {network.chainName} after.
+                <p className="mt-3 flex gap-2 text-xs leading-5 text-slate-500">
+                  <span aria-hidden="true">ⓘ</span>
+                  <span>
+                    You need a little {sourceGasToken} on {sourceInfo.name} to pay its fees. Your wallet
+                    switches to {sourceInfo.name} for this transfer and back to {network.chainName} after.
+                  </span>
                 </p>
               )}
 
-              {status === "bridging" ? (
-                <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
-              ) : (
-                <PrimaryButton onClick={confirmBridge} disabled={status !== "ready"}>
-                  {status === "estimating" ? "Getting quote..." : !amount ? "Enter an amount" : "Bridge"}
-                </PrimaryButton>
-              )}
+              <div className="mt-4">
+                {busy ? (
+                  <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
+                ) : (
+                  <PrimaryButton onClick={confirmBridge} disabled={status !== "ready" || insufficient}>
+                    {buttonLabel}
+                  </PrimaryButton>
+                )}
+              </div>
 
               {status === "error" && (
-                <div>
-                  <p className="rounded-xl bg-red-50 p-4 text-red-700">{message}</p>
+                <div className="mt-4">
+                  <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{message}</p>
                   <div className="mt-3">
                     {failedResult ? (
                       <PrimaryButton onClick={retryBridge}>Retry</PrimaryButton>
@@ -499,32 +539,97 @@ export default function Bridge() {
               )}
 
               {status === "done" && (
-                <p className="rounded-xl bg-green-50 p-4 text-green-800">
+                <p className="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800">
                   ✓ Bridge complete. Your {token} is on {destinationInfo.name}.
                 </p>
               )}
 
               {steps.length > 0 && (
-                <ul className="space-y-1 text-xs text-slate-500">
+                <ul className="mt-4 space-y-2 rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
                   {steps.map((step) => (
-                    <li key={step.name}>
-                      {step.state === "success" ? "✓" : step.state === "error" ? "✕" : "•"} {step.name}
+                    <li key={step.name} className="flex items-center justify-between gap-3">
+                      <span>
+                        <span className={step.state === "error" ? "text-red-600" : "text-green-600"}>
+                          {step.state === "success" ? "✓" : step.state === "error" ? "✕" : "•"}
+                        </span>{" "}
+                        {step.name}
+                      </span>
                       {step.explorerUrl && (
-                        <>
-                          {" · "}
-                          <a href={step.explorerUrl} target="_blank" rel="noreferrer" className="underline">
-                            View on explorer
-                          </a>
-                        </>
+                        <a href={step.explorerUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">
+                          View on explorer ↗
+                        </a>
                       )}
                     </li>
                   ))}
                 </ul>
               )}
+
+              <p className="mt-4 text-center text-xs text-slate-400">
+                Powered by Circle CCTP. Your wallet signs the transfer — ProofPay never holds your funds.
+              </p>
             </div>
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+// Brand colors for the small chain / token marks. Set inline (not as
+// Tailwind color classes) so the network theme overrides in index.css,
+// which re-color blue utilities, can never touch them.
+const CHAIN_COLORS = {
+  Ethereum: "#627EEA",
+  Base: "#0052FF",
+  Arbitrum: "#28A0F0",
+  Optimism: "#FF0420",
+  Polygon: "#8247E5",
+  Avalanche: "#E84142",
+  Arc: "#16A34A",
+};
+const TOKEN_MARKS = {
+  USDC: { color: "#2775CA", sign: "$" },
+  EURC: { color: "#1A4FD6", sign: "€" },
+};
+
+function ChainDot({ chain }) {
+  const name = CHAIN_INFO[chain]?.name || chain;
+  const family = Object.keys(CHAIN_COLORS).find((key) => chain.startsWith(key)) || "Arc";
+  return (
+    <span
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+      style={{ backgroundColor: CHAIN_COLORS[family] }}
+      aria-hidden="true"
+    >
+      {name.charAt(0)}
+    </span>
+  );
+}
+
+function TokenBadge({ token }) {
+  const mark = TOKEN_MARKS[token];
+  return (
+    <span className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-3 text-sm font-bold text-slate-900 shadow-sm">
+      <span
+        className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
+        style={{ backgroundColor: mark.color }}
+        aria-hidden="true"
+      >
+        {mark.sign}
+      </span>
+      {token}
+    </span>
+  );
+}
+
+function FeeRow({ label, value, note }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-semibold text-slate-900">
+        {value}
+        {note && <span className="block text-xs font-normal text-slate-400">{note}</span>}
+      </dd>
     </div>
   );
 }
