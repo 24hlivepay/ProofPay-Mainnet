@@ -274,8 +274,8 @@ export default function CreateEscrow() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-2xl px-5 py-7 sm:px-6">
-        <button onClick={() => navigate("/dashboard/buying")} className="mb-5 text-sm font-semibold text-blue-600">
-          ← Back to Buying Escrows
+        <button onClick={() => navigate("/dashboard/buying")} className="mb-5 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
+          ← Buying Escrows
         </button>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
