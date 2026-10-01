@@ -339,8 +339,7 @@ export default function Bridge() {
   else if (status === "estimating") buttonLabel = "Getting quote...";
 
   const chainPicker = (
-    <div className="flex items-center gap-2">
-      <ChainDot chain={otherChain} />
+    <div className="flex items-center">
       <select
         value={otherChain}
         disabled={busy}
@@ -358,10 +357,7 @@ export default function Bridge() {
     </div>
   );
   const arcLabel = (
-    <div className="flex items-center gap-2">
-      <ChainDot chain={routes.arc} />
-      <span className="py-1 text-sm font-bold text-slate-900">{network.chainName}</span>
-    </div>
+    <span className="py-1 text-sm font-bold text-slate-900">{network.chainName}</span>
   );
 
   return (
@@ -439,7 +435,7 @@ export default function Bridge() {
                     aria-label="Amount to send"
                     className="w-full min-w-0 [appearance:textfield] bg-transparent text-3xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
-                  <TokenBadge token={token} />
+                  <span className="shrink-0 text-lg font-bold text-slate-900">{token}</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs">
                   <span className={insufficient ? "font-semibold text-red-600" : "text-slate-500"}>
@@ -487,7 +483,7 @@ export default function Bridge() {
                   >
                     {receiveAmount !== null ? trimAmount(receiveAmount) : status === "estimating" ? "..." : "0"}
                   </p>
-                  <TokenBadge token={token} />
+                  <span className="shrink-0 text-lg font-bold text-slate-900">{token}</span>
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
                   Balance: {destinationBalance !== undefined ? trimAmount(destinationBalance, 4) : "..."} {token}
@@ -582,53 +578,6 @@ export default function Bridge() {
         </div>
       </main>
     </div>
-  );
-}
-
-// Brand colors for the small chain / token marks. Set inline (not as
-// Tailwind color classes) so the network theme overrides in index.css,
-// which re-color blue utilities, can never touch them.
-const CHAIN_COLORS = {
-  Ethereum: "#627EEA",
-  Base: "#0052FF",
-  Arbitrum: "#28A0F0",
-  Optimism: "#FF0420",
-  Polygon: "#8247E5",
-  Avalanche: "#E84142",
-  Arc: "#16A34A",
-};
-const TOKEN_MARKS = {
-  USDC: { color: "#2775CA", sign: "$" },
-  EURC: { color: "#1A4FD6", sign: "€" },
-};
-
-function ChainDot({ chain }) {
-  const name = CHAIN_INFO[chain]?.name || chain;
-  const family = Object.keys(CHAIN_COLORS).find((key) => chain.startsWith(key)) || "Arc";
-  return (
-    <span
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-      style={{ backgroundColor: CHAIN_COLORS[family] }}
-      aria-hidden="true"
-    >
-      {name.charAt(0)}
-    </span>
-  );
-}
-
-function TokenBadge({ token }) {
-  const mark = TOKEN_MARKS[token];
-  return (
-    <span className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-3 text-sm font-bold text-slate-900 shadow-sm">
-      <span
-        className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
-        style={{ backgroundColor: mark.color }}
-        aria-hidden="true"
-      >
-        {mark.sign}
-      </span>
-      {token}
-    </span>
   );
 }
 
