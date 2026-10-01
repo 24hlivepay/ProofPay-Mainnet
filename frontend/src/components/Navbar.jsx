@@ -106,7 +106,7 @@ export default function Navbar({ walletSlot }) {
       >
         <button
           type="button"
-          onClick={() => navigate("/dashboard")}
+          onClick={() => navigate("/wallet")}
           className="flex items-center gap-3 text-left"
         >
           <ProofPayLogo className="h-10 w-10" />

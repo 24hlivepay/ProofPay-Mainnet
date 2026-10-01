@@ -4,6 +4,7 @@ import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 import { Contract, formatUnits } from "ethers";
 import Navbar from "../components/Navbar";
+import DashboardTabs from "../components/DashboardTabs";
 import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
@@ -441,9 +442,7 @@ export default function Swap() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
-        <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
-          ← Back to Dashboard
-        </button>
+        <DashboardTabs active="swap-bridge" />
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h1 className="sr-only">Swap</h1>
           <SwapBridgeTabs active="swap" disabled={busy} />

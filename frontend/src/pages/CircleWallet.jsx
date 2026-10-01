@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import DashboardTabs from "../components/DashboardTabs";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import CopyButton from "../components/CopyButton";
@@ -361,12 +362,7 @@ export default function CircleWallet() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="mb-6 font-semibold text-blue-600 hover:text-blue-700"
-        >
-          ← Back to dashboard
-        </button>
+        <DashboardTabs active="wallet" />
 
         <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
