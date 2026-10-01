@@ -74,7 +74,7 @@ export default function AdminEscrows() {
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8">
         <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
-          ← Back to Dashboard
+          ← Back
         </button>
         <h1 className="mt-4 text-3xl font-bold text-slate-900">All escrows</h1>
         <p className="mt-2 text-slate-600">Search or filter every escrow on the current network.</p>
