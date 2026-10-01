@@ -60,6 +60,30 @@ function getSwapTokenInfo(symbol, networkId) {
 
 const kit = new AppKit();
 
+// Circle's swap service sometimes answers "No route available" for a pair
+// it quotes fine a second later (seen on Arc Testnet: the same request
+// failed, then succeeded on the next call). The SDK asks the service for
+// the route before it asks the wallet for anything, so repeating the call
+// is safe -- nothing has been signed when this error comes back.
+const NO_ROUTE = /no route available/i;
+async function withRouteRetry(run, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (attempt >= attempts || !NO_ROUTE.test(error?.message || "")) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    }
+  }
+}
+
+function describeSwapError(error, fallback) {
+  const text = error.response?.data?.message || error.message || fallback;
+  return NO_ROUTE.test(text)
+    ? "Circle's swap service could not find a route just now. Nothing was sent. Please try again in a moment."
+    : text;
+}
+
 // App Kit labels each fee line with a type; these are the names shown.
 const FEE_LABELS = { provider: "Swap fee", gas: "Network fee" };
 
@@ -249,16 +273,12 @@ export default function Swap() {
       }
 
       const adapter = await buildAdapter();
-      const result = await kit.estimateSwap(buildSwapParams(adapter));
+      const result = await withRouteRetry(() => kit.estimateSwap(buildSwapParams(adapter)));
       setEstimate(result);
       setStatus("ready");
     } catch (error) {
       setStatus("error");
-      setMessage(
-        error.response?.data?.message ||
-        error.message ||
-        "Could not get a quote for this swap."
-      );
+      setMessage(describeSwapError(error, "Could not get a quote for this swap."));
     }
   }
 
@@ -355,17 +375,13 @@ export default function Swap() {
       }
 
       const adapter = await buildAdapter();
-      const result = await kit.swap(buildSwapParams(adapter));
+      const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
       setTxHash(result?.transactionHash || result?.hash || "");
       setStatus("done");
       loadBalances();
     } catch (error) {
       setStatus("error");
-      setMessage(
-        error.response?.data?.message ||
-        error.message ||
-        "The swap did not go through."
-      );
+      setMessage(describeSwapError(error, "The swap did not go through."));
     } finally {
       runningRef.current = false;
     }
