@@ -118,14 +118,14 @@ export default function PendingOrders() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
-        <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="mb-5 font-semibold text-blue-600 hover:text-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
         <div>
           <h1 className="text-3xl font-bold text-slate-900">{isSellerRole ? "Pending Sales" : "Pending Orders"}</h1>
         </div>
 
         {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
 
-        <div className="mt-8 space-y-5">
+        <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="mt-8 mb-3 font-semibold text-blue-600 hover:text-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
+        <div className="space-y-5">
           {!loading && orders.length === 0 && (
             <EmptyState icon="⏳" title={isSellerRole ? "No pending sales" : "No pending orders"} message={isSellerRole ? "Accepted sales waiting for buyer payment will appear here." : "New escrow requests will appear here until funds are deposited."} />
           )}

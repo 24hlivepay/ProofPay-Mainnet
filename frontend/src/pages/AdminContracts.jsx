@@ -72,16 +72,17 @@ export default function AdminContracts() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-4xl px-5 py-8">
-        <button onClick={() => navigate("/dashboard")} className="font-semibold text-blue-600 hover:text-blue-700">
-          ← Back
-        </button>
-        <h1 className="mt-4 text-3xl font-bold text-slate-900">Escrow contracts</h1>
+        <h1 className="text-3xl font-bold text-slate-900">Escrow contracts</h1>
         <p className="mt-2 text-slate-600">
           The escrow contracts on {network.chainName}. Pausing stops <strong>new</strong> escrows
           only. Money already locked is never affected, and delivery, release and disputes keep
           working. Pausing and resuming are sent from the admin wallet (MetaMask or Rabby) and
           only work for the contract owner.
         </p>
+
+        <button onClick={() => navigate("/dashboard")} className="mt-5 font-semibold text-blue-600 hover:text-blue-700">
+          ← Back
+        </button>
 
         <AdminNav />
 
