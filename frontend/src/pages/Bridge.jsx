@@ -85,6 +85,13 @@ const STEP_LABELS = {
 //
 //   sourcePaid  USDC into Arc. The SDK's own receive-exact option
 //               (config.feePayment: "source"): the wallet pays amount + fee.
+//               Confirmed with a real wallet-signed bridge only on these
+//               chains -- the Quote API rejects it from every other source
+//               chain with "Source-paid fees are not supported from <chain>"
+//               (confirmed live from Arbitrum Sepolia, Optimism Sepolia,
+//               Polygon Amoy, Avalanche Fuji). Checking the chain here,
+//               not just the destination, avoids ever attempting (and
+//               failing) the request on an unsupported chain.
 //   grossUp     USDC out of Arc. The SDK refuses feePayment "source" from
 //               Arc, and by default takes the relay fee out of what arrives.
 //               The fee is a flat amount, so the page adds it to what is
@@ -93,11 +100,15 @@ const STEP_LABELS = {
 //               chain's gas token and paid on top; nothing to adjust.
 //   deducted    USDC the default way: the fee comes out of what arrives.
 //               Used on mainnet until receive-exact has been confirmed with
-//               a real wallet on testnet.
-function feeMode(token, sourceIsArc, networkId) {
+//               a real wallet on testnet, and on every testnet source chain
+//               that doesn't support feePayment "source".
+const SOURCE_PAID_CHAINS = new Set(["Base_Sepolia", "Ethereum_Sepolia", "Base", "Ethereum"]);
+
+function feeMode(token, sourceChain, sourceIsArc, networkId) {
   if (token !== "USDC") return "quoted";
   if (networkId === "mainnet" && !RECEIVE_EXACT_MAINNET_ENABLED) return "deducted";
-  return sourceIsArc ? "grossUp" : "sourcePaid";
+  if (sourceIsArc) return "grossUp";
+  return SOURCE_PAID_CHAINS.has(sourceChain) ? "sourcePaid" : "deducted";
 }
 
 function sumFees(estimate, token) {
@@ -249,18 +260,16 @@ export default function Bridge() {
   // Quotes the bridge so that `amount` is what arrives (see feeMode()).
   // Returns the params to hand to kit.bridge() along with the estimate.
   async function quoteBridge(adapter) {
-    const mode = feeMode(token, sourceChain === routes.arc, network.id);
+    const mode = feeMode(token, sourceChain, sourceChain === routes.arc, network.id);
 
     if (mode === "sourcePaid") {
       try {
         const params = buildBridgeParams(adapter, amount, { feePayment: "source" });
         return { mode, params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
       } catch (error) {
-        // Not every source chain supports feePayment "source" (confirmed
-        // working on Base Sepolia; Avalanche Fuji and others reject it with
-        // this exact validation error). Fall back to the SDK's default
-        // destination-paid fees, which every chain supports, rather than
-        // failing the bridge outright.
+        // Backstop for SOURCE_PAID_CHAINS being wrong or going stale: fall
+        // back to the SDK's default destination-paid fees (every chain
+        // supports it) instead of failing the bridge outright.
         if (!/feePayment/i.test(error?.message || "")) throw error;
         const params = buildBridgeParams(adapter, amount);
         return { mode: "deducted", params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
