@@ -118,12 +118,10 @@ export default function PendingOrders() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">{isSellerRole ? "Pending Sales" : "Pending Orders"}</h1>
-            <p className="mt-2 text-slate-600">{isSellerRole ? "Sales waiting for the buyer to lock the selected asset." : "Escrows waiting for seller acceptance or buyer deposit."}</p>
-          </div>
-          <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
+        <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="mb-5 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">{isSellerRole ? "Pending Sales" : "Pending Orders"}</h1>
+          <p className="mt-2 text-slate-600">{isSellerRole ? "Sales waiting for the buyer to lock the selected asset." : "Escrows waiting for seller acceptance or buyer deposit."}</p>
         </div>
 
         {error && <p className="mt-6 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
