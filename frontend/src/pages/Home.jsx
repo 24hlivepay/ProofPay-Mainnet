@@ -391,7 +391,7 @@ export default function Home() {
             {activeGroup === "swap-bridge" && (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <WorkspaceCard icon="🔄" title="Swap" description="Exchange USDC and EURC directly from your connected wallet." onClick={() => navigate("/swap")} />
-                <WorkspaceCard icon="🌉" title="Bridge" description="Move USDC between Arc and other blockchains like Base." onClick={() => navigate("/bridge")} />
+                <WorkspaceCard icon="🌉" title="Bridge" description="Move USDC and EURC between Arc and other blockchains." onClick={() => navigate("/bridge")} />
               </div>
             )}
 
