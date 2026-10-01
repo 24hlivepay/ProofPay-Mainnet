@@ -59,7 +59,7 @@ export default function Dispute() {
 
   if (!order) return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-xl p-8"><p className="rounded-xl bg-red-50 p-4 text-red-700">Open a dispute from an active escrow.</p></main></div>;
   return <div className="min-h-screen bg-slate-100"><Navbar walletSlot={walletSlot} /><main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
-    <button onClick={() => navigate(-1)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">← Back</button>
+    <button onClick={() => navigate(-1)} className="font-semibold text-blue-600 hover:text-blue-700">← Back</button>
     <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <h1 className="text-3xl font-bold text-slate-900">Open dispute</h1>
       <p className="mt-2 text-slate-600">{order.escrowId} · Assets stay locked in the escrow contract. Only ProofPay admin can resolve the case.</p>
