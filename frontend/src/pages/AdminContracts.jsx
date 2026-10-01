@@ -72,7 +72,7 @@ export default function AdminContracts() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-4xl px-5 py-8">
-        <button onClick={() => navigate("/dashboard")} className="text-sm font-semibold text-blue-700">
+        <button onClick={() => navigate("/dashboard")} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
           ← Back
         </button>
         <h1 className="mt-4 text-3xl font-bold text-slate-900">Escrow contracts</h1>
