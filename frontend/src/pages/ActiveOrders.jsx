@@ -139,7 +139,6 @@ export default function ActiveOrders() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
-        <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="mb-5 font-semibold text-blue-600 hover:text-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
         <div>
           <h1 className="text-3xl font-bold text-slate-900">{isSellerRole ? "Active Sales" : "Active Purchases"}</h1>
         </div>
@@ -151,7 +150,8 @@ export default function ActiveOrders() {
           </p>
         )}
 
-        <div className="mt-8 space-y-5">
+        <button onClick={() => navigate(isSellerRole ? "/dashboard/selling" : "/dashboard/buying")} className="mt-8 mb-3 font-semibold text-blue-600 hover:text-blue-700">← {isSellerRole ? "Selling Escrows" : "Buying Escrows"}</button>
+        <div className="space-y-5">
           {!loading && orders.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
               <div className="text-4xl">📦</div>

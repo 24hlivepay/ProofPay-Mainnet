@@ -50,13 +50,14 @@ export default function AdminAuditLog() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-4xl px-5 py-8">
-        <button onClick={() => navigate("/dashboard")} className="font-semibold text-blue-600 hover:text-blue-700">
-          ← Back
-        </button>
-        <h1 className="mt-4 text-3xl font-bold text-slate-900">Admin audit log</h1>
+        <h1 className="text-3xl font-bold text-slate-900">Admin audit log</h1>
         <p className="mt-2 text-slate-600">
           Every dispute message and resolution sent from the admin account, with who and when.
         </p>
+
+        <button onClick={() => navigate("/dashboard")} className="mt-5 font-semibold text-blue-600 hover:text-blue-700">
+          ← Back
+        </button>
 
         <AdminNav />
 
