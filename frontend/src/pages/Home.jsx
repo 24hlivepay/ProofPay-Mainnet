@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import DashboardTabs from "../components/DashboardTabs";
 import {
   connectWalletWithOptions,
   discoverInjectedWallets,
@@ -352,8 +351,6 @@ export default function Home() {
 
         {!mode && (
           <div className="mx-auto mt-7 max-w-5xl">
-            <DashboardTabs active="escrows" />
-
             <div className="mt-5">
               <LiveEscrowOverview
                 stats={networkStats}

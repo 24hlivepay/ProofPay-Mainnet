@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getCurrentNetworkId, getNetworkConfig, NETWORKS, setCurrentNetworkId } from "../config/network";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ProofPayLogo from "./ProofPayLogo";
+import DashboardTabs from "./DashboardTabs";
 
 // PR-3: non-blocking auth-expired banner.
 // Listens for the "proofpay:auth-expired" event fired by api.js on 401.
@@ -100,22 +101,22 @@ export default function Navbar({ walletSlot }) {
           ? "Arc Mainnet — live, real funds move here"
           : "Arc Testnet — sandbox, nothing here moves real money"}
       </div>
-      <nav
-        aria-label="Main navigation"
-        className="flex items-center justify-between px-5 py-4 sm:px-6"
-      >
-        <button
-          type="button"
-          onClick={() => navigate("/wallet")}
-          className="flex items-center gap-3 text-left"
-        >
-          <ProofPayLogo className="h-10 w-10" />
-          <span className="text-lg font-bold tracking-tight text-slate-900">
-            ProofPay
-          </span>
-        </button>
+      <nav aria-label="Main navigation" className="px-5 py-3.5 sm:px-6">
+        <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => navigate("/wallet")}
+            className="flex shrink-0 items-center gap-3 text-left"
+          >
+            <ProofPayLogo className="h-9 w-9" />
+            <span className="hidden text-lg font-bold tracking-tight text-slate-900 sm:inline">
+              ProofPay
+            </span>
+          </button>
 
-        <div className="flex items-center gap-3">
+          <DashboardTabs className="hidden sm:flex" />
+
+        <div className="flex shrink-0 items-center gap-3">
         <div className="relative" ref={menuRef}>
           <button
             type="button"
@@ -153,6 +154,9 @@ export default function Navbar({ walletSlot }) {
         </div>
         {walletSlot}
         </div>
+        </div>
+
+        <DashboardTabs className="mt-3 flex sm:hidden" />
       </nav>
     </header>
   );
