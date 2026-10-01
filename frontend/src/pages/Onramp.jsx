@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppKit } from "@circle-fin/app-kit";
 import Navbar from "../components/Navbar";
-import DashboardTabs from "../components/DashboardTabs";
 import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWalletWithOptions } from "../services/wallet";
@@ -106,8 +105,7 @@ export default function Onramp() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-2xl px-5 py-8 sm:px-6">
-        <DashboardTabs active="onramp" />
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <h1 className="text-3xl font-bold text-slate-900">Buy USDC / EURC</h1>
           <p className="mt-2 text-slate-600">
             Fund your {network.chainName} wallet with a card, Apple Pay, Google Pay, or bank

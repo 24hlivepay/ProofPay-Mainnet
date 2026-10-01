@@ -1,36 +1,44 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
-// Shared top-of-page tab bar for Wallet / Swap-Bridge / Escrows / Onramp.
-// Wallet is the landing surface (see Hero.jsx and Navbar.jsx), so every
-// other real page -- Swap, Onramp, and the Escrows hub (Home.jsx /dashboard)
-// -- carries this same bar so none of them become a dead end: whichever tab
-// you're not currently on just navigates to that tab's real page directly.
+// Global top-nav tabs, rendered once inside Navbar.jsx so they show at the
+// same level as the logo on every page -- not just on the four pages they
+// link to. Active tab is derived from the current route, not passed in, so
+// it stays correct automatically as new routes are added.
 const TABS = [
+  { key: "escrows", label: "Escrows", to: "/dashboard" },
   { key: "wallet", label: "Wallet", to: "/wallet" },
   { key: "swap-bridge", label: "Swap / Bridge", to: "/swap" },
-  { key: "escrows", label: "Escrows", to: "/dashboard" },
   { key: "onramp", label: "Onramp Buy", to: "/onramp" },
 ];
 
-export default function DashboardTabs({ active }) {
+function matchesTab(pathname, tab) {
+  if (tab.key === "escrows") return pathname.startsWith("/dashboard");
+  return pathname.startsWith(tab.to);
+}
+
+export default function DashboardTabs({ className = "flex" }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   return (
-    <div className="mb-6 flex gap-2 border-b border-slate-200">
-      {TABS.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          onClick={() => navigate(tab.to)}
-          className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold ${
-            active === tab.key
-              ? "border-green-600 text-green-700"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
+    <div className={`${className} gap-1 overflow-x-auto`}>
+      {TABS.map((tab) => {
+        const active = matchesTab(pathname, tab);
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => navigate(tab.to)}
+            className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold transition ${
+              active
+                ? "bg-green-600 text-white"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
