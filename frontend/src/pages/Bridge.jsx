@@ -67,17 +67,48 @@ const CHAIN_INFO = Object.fromEntries(
 
 const kit = new AppKit();
 
-// A fee quoted in the bridged token comes out of the amount that arrives
-// (USDC's forwarder fee). A fee quoted in anything else is paid on top, from
-// the wallet on the source chain (EURC's fee is in the source chain's gas
-// token: ETH on Base, USDC on Arc).
-function splitFees(estimate, token) {
-  const fees = estimate?.fees || [];
-  const deducted = fees
+// The page promises "the amount you type is the amount that arrives", with
+// the bridge fee paid on top. How that is achieved depends on the route:
+//
+//   sourcePaid  USDC into Arc. The SDK's own receive-exact option
+//               (config.feePayment: "source"): the wallet pays amount + fee.
+//   grossUp     USDC out of Arc. The SDK refuses feePayment "source" from
+//               Arc, and by default takes the relay fee out of what arrives.
+//               The fee is a flat amount, so the page adds it to what is
+//               sent: type 10, send 10.05, 10 arrives.
+//   quoted      EURC (CCTPx). The fee is already quoted in the source
+//               chain's gas token and paid on top; nothing to adjust.
+function feeMode(token, sourceIsArc) {
+  if (token !== "USDC") return "quoted";
+  return sourceIsArc ? "grossUp" : "sourcePaid";
+}
+
+function sumFees(estimate, token) {
+  return (estimate?.fees || [])
     .filter((fee) => fee.token === token)
     .reduce((total, fee) => total + Number(fee.amount || 0), 0);
-  const extra = fees.filter((fee) => fee.token !== token && Number(fee.amount || 0) > 0);
-  return { deducted, extra };
+}
+
+// What a quote means for the user: what leaves the wallet in the bridged
+// token, what arrives, and each fee line.
+function summarizeQuote(quote, token, typedAmount) {
+  if (!quote) return null;
+  const { estimate, mode, sentAmount } = quote;
+  const typed = Number(typedAmount);
+  const sameTokenFee = sumFees(estimate, token);
+  const fees = (estimate.fees || []).filter((fee) => Number(fee.amount || 0) > 0);
+
+  if (mode === "sourcePaid") {
+    return {
+      fees,
+      walletTotal: Number(estimate.totalDebit) || typed + sameTokenFee,
+      receive: Number(estimate.amountReceived) || typed,
+    };
+  }
+  if (mode === "grossUp") {
+    return { fees, walletTotal: Number(sentAmount), receive: Number(sentAmount) - sameTokenFee };
+  }
+  return { fees, walletTotal: typed, receive: typed - sameTokenFee };
 }
 
 function trimAmount(value, digits = 6) {
@@ -96,6 +127,8 @@ export default function Bridge() {
   const [otherChain, setOtherChain] = useState(routes.chains.USDC[1]);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("idle"); // idle | estimating | ready | bridging | done | error
+  // { estimate, mode, sentAmount } -- see feeMode(). Named "estimate" for the
+  // quote-refresh code shared with the Swap page.
   const [estimate, setEstimate] = useState(null);
   const [message, setMessage] = useState("");
   const [steps, setSteps] = useState([]);
@@ -105,6 +138,8 @@ export default function Bridge() {
   // lands before React re-renders the disabled button would otherwise start
   // a second approve + transfer for the same amount.
   const runningRef = useRef(false);
+  // Set by the Max button, cleared when the user types an amount.
+  const maxRequestedRef = useRef(false);
 
   const sourceChain = direction === "toArc" ? otherChain : routes.arc;
   const destinationChain = direction === "toArc" ? routes.arc : otherChain;
@@ -153,13 +188,19 @@ export default function Bridge() {
     resetQuote();
   }
 
+  // Leaving Arc with USDC, gas is paid out of the same balance -- keep a
+  // small reserve (same reasoning as Swap's Max button).
+  function gasReserve(raw) {
+    return sourceChain === routes.arc && token === "USDC" ? Math.min(0.05, raw / 2) : 0;
+  }
+
   function fillMaxAmount() {
     const raw = Number(balances[`${sourceChain}:${token}`] || 0);
     if (raw <= 0) return;
-    // Leaving Arc with USDC, gas is paid out of the same balance -- keep a
-    // small reserve (same reasoning as Swap's Max button).
-    const reserve = sourceChain === routes.arc && token === "USDC" ? Math.min(0.05, raw / 2) : 0;
-    setAmount(String(Math.max(raw - reserve, 0)));
+    // The fee is paid on top, so Max has to leave room for it. It is only
+    // known once a quote is back; getEstimate() trims the amount then.
+    maxRequestedRef.current = true;
+    setAmount(String(Math.max(raw - gasReserve(raw), 0)));
     resetQuote();
   }
 
@@ -171,19 +212,47 @@ export default function Bridge() {
     return { adapter: await createViemAdapterFromProvider({ provider }), provider };
   }
 
-  function buildBridgeParams(adapter) {
+  function buildBridgeParams(adapter, sentAmount, extraConfig = {}) {
     return {
       from: { adapter, chain: sourceChain },
       // Forwarder-only destination: Circle's relayer submits the mint, so
       // the user never needs gas on the destination chain and the wallet
       // only ever signs on the source chain.
       to: { chain: destinationChain, recipientAddress: walletAddress, useForwarder: true },
-      amount,
+      amount: sentAmount,
       token,
       // Plain approve -> burn. EIP-5792 batching behaves differently from
       // wallet to wallet; the sequential flow is the predictable one.
-      config: { batchTransactions: false },
+      config: { batchTransactions: false, ...extraConfig },
     };
+  }
+
+  // Quotes the bridge so that `amount` is what arrives (see feeMode()).
+  // Returns the params to hand to kit.bridge() along with the estimate.
+  async function quoteBridge(adapter) {
+    const mode = feeMode(token, sourceChain === routes.arc);
+
+    if (mode === "sourcePaid") {
+      const params = buildBridgeParams(adapter, amount, { feePayment: "source" });
+      return { mode, params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
+    }
+
+    if (mode === "grossUp") {
+      // First quote tells us the fee; the second is for amount + fee, which
+      // is what actually gets sent.
+      const first = await kit.estimateBridge(buildBridgeParams(adapter, amount));
+      const sentAmount = (Number(amount) + sumFees(first, token)).toFixed(6);
+      const params = buildBridgeParams(adapter, sentAmount);
+      const second = await kit.estimateBridge(params);
+      // The fee service now and then answers with no fee lines at all (seen
+      // on testnet). Keep whichever quote actually carries the fee, so the
+      // page never shows a fee of 0 for an amount it has already grossed up.
+      const estimate = sumFees(second, token) > 0 ? second : { ...second, fees: first.fees };
+      return { mode, params, sentAmount, estimate };
+    }
+
+    const params = buildBridgeParams(adapter, amount);
+    return { mode, params, sentAmount: amount, estimate: await kit.estimateBridge(params) };
   }
 
   async function getEstimate() {
@@ -191,14 +260,24 @@ export default function Bridge() {
       setStatus("estimating");
       setMessage("");
       const { adapter } = await buildAdapter();
-      const result = await kit.estimateBridge(buildBridgeParams(adapter));
-      setEstimate(result);
-      const { deducted } = splitFees(result, token);
-      if (Number(amount) <= deducted) {
-        setStatus("error");
-        setMessage(`This amount is smaller than the bridge fee (${trimAmount(deducted)} ${token}). Enter a larger amount.`);
-        return;
+      const { mode, sentAmount, estimate: result } = await quoteBridge(adapter);
+      const quote = { mode, sentAmount, estimate: result };
+
+      // Max was pressed before the fee was known: shrink the amount so the
+      // amount plus the fee fits the balance, and quote again.
+      const balance = Number(balances[`${sourceChain}:${token}`] || 0);
+      const summary = summarizeQuote(quote, token, amount);
+      if (maxRequestedRef.current && balance > 0 && summary.walletTotal + gasReserve(balance) > balance) {
+        maxRequestedRef.current = false;
+        const fee = summary.walletTotal - Number(amount);
+        const fitted = Math.floor(Math.max(balance - gasReserve(balance) - fee, 0) * 1e6) / 1e6;
+        if (fitted > 0 && fitted !== Number(amount)) {
+          setAmount(String(fitted));
+          return;
+        }
       }
+
+      setEstimate(quote);
       setStatus("ready");
     } catch (error) {
       setStatus("error");
@@ -327,17 +406,21 @@ export default function Bridge() {
     }
   }
 
-  const confirmBridge = () => runBridge((adapter) => kit.bridge(buildBridgeParams(adapter)));
+  // Quote again at the moment of sending so the fee added on top is current.
+  const confirmBridge = () => runBridge(async (adapter) => kit.bridge((await quoteBridge(adapter)).params));
   const retryBridge = () => runBridge((adapter) => kit.retryBridge(failedResult, { from: adapter, to: adapter }));
 
-  const { deducted: deductedFee, extra: extraFees } = splitFees(estimate, token);
-  const receiveAmount = estimate ? Math.max(Number(amount) - deductedFee, 0) : null;
+  const summary = summarizeQuote(estimate, token, amount);
+  const receiveAmount = summary ? Math.max(summary.receive, 0) : null;
   const sourceBalance = balances[`${sourceChain}:${token}`];
   const destinationBalance = balances[`${destinationChain}:${token}`];
-  const sourceGas = (estimate?.gasFees || [])
+  const sourceGas = (estimate?.estimate?.gasFees || [])
     .reduce((total, gas) => total + Number(gas?.fees?.fee || 0), 0);
 
-  const insufficient = sourceBalance !== undefined && Number(amount) > Number(sourceBalance);
+  // What must be in the wallet: the amount plus any fee in the same token.
+  // Before a quote is back, only the typed amount is known.
+  const walletTotal = summary ? summary.walletTotal : Number(amount || 0);
+  const insufficient = sourceBalance !== undefined && walletTotal > Number(sourceBalance);
   const busy = status === "bridging";
   const shortAddress = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "";
 
@@ -435,11 +518,12 @@ export default function Bridge() {
                     value={amount}
                     disabled={busy}
                     onChange={(event) => {
+                      maxRequestedRef.current = false;
                       setAmount(event.target.value);
                       resetQuote();
                     }}
                     placeholder="0"
-                    aria-label="Amount to send"
+                    aria-label="Amount to bridge"
                     className="w-full min-w-0 [appearance:textfield] bg-transparent text-3xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <span className="shrink-0 text-lg font-bold text-slate-900">{token}</span>
@@ -499,17 +583,17 @@ export default function Bridge() {
 
               {estimate && (
                 <dl className="mt-4 space-y-2 rounded-2xl border border-slate-200 p-4 text-sm">
-                  {deductedFee > 0 && (
-                    <DetailRow label="Bridge fee" value={`${trimAmount(deductedFee)} ${token}`} note="taken from the amount that arrives" />
-                  )}
-                  {extraFees.map((fee) => (
+                  {summary.fees.map((fee) => (
                     <DetailRow
                       key={`${fee.type}-${fee.token}`}
-                      label="Bridge fee"
+                      label={fee.type === "provider" && summary.fees.length > 1 ? "Transfer fee" : "Bridge fee"}
                       value={`${trimAmount(fee.amount, 8)} ${fee.token}`}
-                      note={`paid from your wallet on ${sourceInfo.name}`}
+                      note={`added on top, paid from your wallet on ${sourceInfo.name}`}
                     />
                   ))}
+                  {summary.walletTotal > Number(amount) && (
+                    <DetailRow label="Total from your wallet" value={`${trimAmount(summary.walletTotal)} ${token}`} note="amount plus bridge fee" />
+                  )}
                   {sourceGas > 0 && (
                     <DetailRow label="Network fee" value={`~${trimAmount(sourceGas, 8)} ${sourceGasToken}`} note={`on ${sourceInfo.name}`} />
                   )}
