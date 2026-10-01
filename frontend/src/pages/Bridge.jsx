@@ -297,8 +297,14 @@ export default function Bridge() {
 
       setStatus("done");
       setMessage("");
-      loadBalance(sourceChain);
-      loadBalance(destinationChain);
+      setAmount("");
+      setEstimate(null);
+      // The source balance updates once the transfer is in a block and the
+      // destination a little later, so read both again a few times.
+      [0, 4000, 12000, 30000].forEach((delay) => window.setTimeout(() => {
+        loadBalance(sourceChain);
+        loadBalance(destinationChain);
+      }, delay));
     } catch (error) {
       setStatus("error");
       setMessage(

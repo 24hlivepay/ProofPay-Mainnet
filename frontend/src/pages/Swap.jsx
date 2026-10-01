@@ -194,7 +194,17 @@ export default function Swap() {
   function formatBalance(symbol) {
     const value = balances[symbol];
     if (value === undefined) return balancesLoading ? "..." : null;
-    return Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 });
+    // cirBTC amounts are tiny: 4 decimals showed 0.00013042 as 0.0001.
+    return Number(value).toLocaleString(undefined, { maximumFractionDigits: symbol === "cirBTC" ? 8 : 4 });
+  }
+
+  // A swap returns as soon as the transaction is sent, before it is in a
+  // block, so a balance read at that moment is still the old one (a real
+  // mainnet swap showed unchanged balances on screen although the tokens
+  // had moved). Read again a few times while it confirms.
+  function refreshBalancesAfterSwap() {
+    loadBalances();
+    [3000, 8000, 20000].forEach((delay) => window.setTimeout(loadBalances, delay));
   }
 
   function fillMaxAmount() {
@@ -370,7 +380,9 @@ export default function Swap() {
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
         setStatus("done");
-        loadBalances();
+        setAmountIn("");
+        setEstimate(null);
+        refreshBalancesAfterSwap();
         return;
       }
 
@@ -378,7 +390,9 @@ export default function Swap() {
       const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
       setTxHash(result?.transactionHash || result?.hash || "");
       setStatus("done");
-      loadBalances();
+      setAmountIn("");
+      setEstimate(null);
+      refreshBalancesAfterSwap();
     } catch (error) {
       setStatus("error");
       setMessage(describeSwapError(error, "The swap did not go through."));
