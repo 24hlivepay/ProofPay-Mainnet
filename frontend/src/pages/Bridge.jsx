@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppKit } from "@circle-fin/app-kit";
 import * as SDK_CHAINS from "@circle-fin/app-kit/chains";
@@ -99,6 +99,10 @@ export default function Bridge() {
   const [steps, setSteps] = useState([]);
   const [failedResult, setFailedResult] = useState(null);
   const [balances, setBalances] = useState({});
+  // True while a bridge is in flight. A ref, not state: a second click that
+  // lands before React re-renders the disabled button would otherwise start
+  // a second approve + transfer for the same amount.
+  const runningRef = useRef(false);
 
   const sourceChain = direction === "toArc" ? otherChain : routes.arc;
   const destinationChain = direction === "toArc" ? routes.arc : otherChain;
@@ -252,6 +256,8 @@ export default function Bridge() {
   }
 
   async function runBridge(action) {
+    if (runningRef.current) return;
+    runningRef.current = true;
     let provider;
     const handleEvent = (payload) => {
       if (payload?.method) setMessage(describeStep(payload.method));
@@ -274,12 +280,15 @@ export default function Bridge() {
 
       if (result?.state === "error") {
         setFailedResult(result);
-        const burned = (result.steps || []).some((step) => /burn|transfer/i.test(step.name) && step.state === "success");
+        const stepList = result.steps || [];
+        const burned = stepList.some((step) => /burn|transfer/i.test(step.name) && step.state === "success");
+        const failedStep = stepList.find((step) => step.state === "error");
+        const reason = failedStep?.errorMessage ? ` Reason: ${String(failedStep.errorMessage).slice(0, 200)}` : "";
         setStatus("error");
         setMessage(
           burned
             ? `Your ${token} left ${sourceInfo.name} but has not arrived on ${destinationInfo.name} yet. Your funds are not lost. Press Retry to finish the delivery.`
-            : "The bridge did not go through. Nothing was sent."
+            : `The bridge stopped${failedStep ? ` at the ${failedStep.name} step` : ""}. Nothing was sent.${reason}`
         );
         return;
       }
@@ -296,6 +305,7 @@ export default function Bridge() {
           : error.message || "The bridge did not go through."
       );
     } finally {
+      runningRef.current = false;
       kit.off("*", handleEvent);
       // The rest of ProofPay expects the wallet on Arc. A bridge from
       // another chain leaves it on that chain, so put it back.
