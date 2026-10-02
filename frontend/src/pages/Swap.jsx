@@ -388,7 +388,12 @@ export default function Swap() {
 
   // Adds the finished swap to the user's History. The paid amount and the
   // quoted amount received are what the page showed at confirm time.
-  function recordSwap(hash, startedAt) {
+  function recordSwap(hash, startedAt, approveHash) {
+    const transaction = (label, txHash) => (
+      /^0x[0-9a-fA-F]{64}$/.test(txHash || "")
+        ? { label, chain: network.chainName, hash: txHash, href: `${network.explorerBase}/tx/${txHash}` }
+        : null
+    );
     recordActivity({
       kind: "swap",
       tokenIn,
@@ -397,7 +402,7 @@ export default function Swap() {
       amountOut: plainAmount(estimate?.estimatedOutput?.amount),
       fees: (estimate?.fees || []).map((fee) => ({ label: FEE_LABELS[fee.type] || "Fee", amount: plainAmount(fee.amount), token: fee.token })),
       durationSec: Math.round((Date.now() - startedAt) / 1000),
-      links: hash ? [{ label: "Swap transaction", href: `${network.explorerBase}/tx/${hash}` }] : [],
+      transactions: [transaction("Approval", approveHash), transaction("Swap", hash)].filter(Boolean),
     });
   }
 
@@ -416,7 +421,7 @@ export default function Swap() {
         setDialogOpen(true);
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
-        recordSwap(result?.transactionHash, startedAt);
+        recordSwap(result?.transactionHash, startedAt, result?.approveTransactionHash);
         setSwapStage("done");
         setStatus("done");
         setAmountIn("");
@@ -427,8 +432,10 @@ export default function Swap() {
 
       const adapter = await buildAdapter();
       const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
-      setTxHash(result?.transactionHash || result?.hash || "");
-      recordSwap(result?.transactionHash || result?.hash, startedAt);
+      // The App Kit's SwapResult names it txHash; the others are kept as a fallback.
+      const swapHash = result?.txHash || result?.transactionHash || result?.hash;
+      setTxHash(swapHash || "");
+      recordSwap(swapHash, startedAt);
       setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
       setStatus("done");
       setAmountIn("");

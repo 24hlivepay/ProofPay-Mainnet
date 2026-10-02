@@ -1426,6 +1426,7 @@ app.post("/api/swap/circle", async (req, res) => {
     if (!fetched) throw new Error("Swap is not configured on this network yet.");
     const { quote, inInfo } = fetched;
 
+    let approveTxHash = null;
     const currentAllowance = await getSwapAllowance({
       network,
       tokenAddress: inInfo.tokenAddress,
@@ -1445,7 +1446,7 @@ app.post("/api/swap/circle", async (req, res) => {
       });
       job.challengeId = approveChallengeId;
       job.status = "awaiting-approval";
-      await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
+      approveTxHash = await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
     }
 
     job.step = "swap";
@@ -1466,7 +1467,7 @@ app.post("/api/swap/circle", async (req, res) => {
     const txHash = await waitForCircleChallenge({ network, userToken, challengeId: swapChallengeId });
 
     job.status = "done";
-    job.result = { transactionHash: txHash };
+    job.result = { transactionHash: txHash, approveTransactionHash: approveTxHash };
   } catch (error) {
     job.status = "error";
     job.error = error.response?.data?.message || error.message || "The swap did not go through.";

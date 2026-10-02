@@ -81,6 +81,37 @@ describe("fees and duration", () => {
   });
 });
 
+describe("transactions", () => {
+  const hash = "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+  it("keeps well-formed transaction lines with their chain and https link", () => {
+    const { entry } = sanitizeActivity({
+      ...bridge,
+      transactions: [
+        { label: "Sent from Arc Mainnet", chain: "Arc Mainnet", hash, href: "https://explorer.arc.io/tx/" + hash },
+        { label: "Delivered on Arbitrum", chain: "Arbitrum", hash },
+      ],
+    });
+    assert.equal(entry.transactions.length, 2);
+    assert.equal(entry.transactions[0].href, "https://explorer.arc.io/tx/" + hash);
+    assert.equal(entry.transactions[1].href, null);
+  });
+
+  it("drops a line whose hash is not 0x + 64 hex, or whose link is not https", () => {
+    const { entry } = sanitizeActivity({
+      ...swap,
+      transactions: [
+        { label: "Short", chain: "Arc", hash: "0x1234" },
+        { label: "No 0x", chain: "Arc", hash: "a1".repeat(32) },
+        { label: "Bad link", chain: "Arc", hash, href: "javascript:alert(1)" },
+        "junk",
+      ],
+    });
+    assert.equal(entry.transactions.length, 1);
+    assert.equal(entry.transactions[0].href, null);
+    assert.deepEqual(sanitizeActivity({ ...swap, transactions: "nope" }).entry.transactions, []);
+  });
+});
+
 describe("activity storage (file mode)", () => {
   it("records, lists newest first, and ignores a repeated clientId", async () => {
     let local = [];

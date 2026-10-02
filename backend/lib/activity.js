@@ -23,6 +23,7 @@ const KINDS = new Set(["swap", "bridge"]);
 const LABEL = /^[A-Za-z0-9 .()\-_/]{1,40}$/;
 const AMOUNT = /^\d{1,18}(\.\d{1,18})?$/;
 const CLIENT_ID = /^[A-Za-z0-9-]{8,64}$/;
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 function cleanLabel(value) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -53,21 +54,39 @@ function cleanDuration(value) {
   return Number.isInteger(seconds) && seconds >= 0 && seconds <= 86400 ? seconds : null;
 }
 
+function cleanHref(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" && url.href.length <= 300 ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function cleanLinks(value) {
   if (!Array.isArray(value)) return [];
   const links = [];
   for (const item of value.slice(0, 5)) {
     const label = cleanLabel(item?.label);
-    let href = null;
-    try {
-      const url = new URL(String(item?.href || ""));
-      if (url.protocol === "https:" && url.href.length <= 300) href = url.href;
-    } catch {
-      // not a URL
-    }
+    const href = cleanHref(item?.href);
     if (label && href) links.push({ label, href });
   }
   return links;
+}
+
+// Every on-chain transaction the swap or bridge made, so the user can check
+// each one by its hash: [{ label, chain, hash, href? }]. A line without a
+// well-formed 0x + 64-hex hash is dropped.
+function cleanTransactions(value) {
+  if (!Array.isArray(value)) return [];
+  const transactions = [];
+  for (const item of value.slice(0, 8)) {
+    const label = cleanLabel(item?.label);
+    const hash = typeof item?.hash === "string" && TX_HASH.test(item.hash) ? item.hash : null;
+    if (!label || !hash) continue;
+    transactions.push({ label, chain: cleanLabel(item?.chain), hash, href: cleanHref(item?.href) });
+  }
+  return transactions;
 }
 
 /**
@@ -96,6 +115,7 @@ export function sanitizeActivity(input) {
         amountOut: cleanAmount(body.amountOut),
         fees: cleanFees(body.fees),
         durationSec: cleanDuration(body.durationSec),
+        transactions: cleanTransactions(body.transactions),
         links: cleanLinks(body.links),
       },
     };
@@ -119,6 +139,7 @@ export function sanitizeActivity(input) {
       received: cleanAmount(body.received),
       fees: cleanFees(body.fees),
       durationSec: cleanDuration(body.durationSec),
+      transactions: cleanTransactions(body.transactions),
       links: cleanLinks(body.links),
     },
   };

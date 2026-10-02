@@ -13,28 +13,28 @@ const EXTERNAL_ICON = (
   </svg>
 );
 
-function ReceiptRow({ label, href, children }) {
-  const body = (
-    <>
+const HASH = /0x[a-fA-F0-9]{64}/;
+
+// One receipt: what happened, its transaction hash (shortened) and the two
+// things you do with a hash -- copy it, open it on the explorer.
+function ReceiptRow({ label, detail, copyValue, copyLabel, href, hrefLabel }) {
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600" aria-hidden="true">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12.5l4.5 4.5L19 7.5" />
         </svg>
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{label}</span>
-    </>
-  );
-
-  if (!href) {
-    return <li className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">{body}{children}</li>;
-  }
-
-  return (
-    <li>
-      <a href={href} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 hover:bg-slate-100">
-        {body}
-        <span className="text-slate-500">{EXTERNAL_ICON}</span>
-      </a>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-800">{label}</span>
+        {detail && <span className="block break-all font-mono text-xs text-slate-500">{detail}</span>}
+      </span>
+      {copyValue && <CopyButton value={copyValue} label={copyLabel} />}
+      {href && (
+        <a href={href} target="_blank" rel="noreferrer" aria-label={hrefLabel} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200">
+          {EXTERNAL_ICON}
+        </a>
+      )}
     </li>
   );
 }
@@ -66,6 +66,15 @@ export default function SwapHistoryDetail() {
     if (walletAddress) load();
   }, [walletAddress, load]);
 
+  // Newer records carry every transaction with its hash; older ones only had
+  // explorer links, so take the hash out of the link.
+  const transactions = item
+    ? item.transactions?.length
+      ? item.transactions
+      : (item.links || [])
+          .map((link) => ({ label: link.label, hash: link.href.match(HASH)?.[0], href: link.href }))
+          .filter((tx) => tx.hash)
+    : [];
   const destinationChain = item ? (item.kind === "swap" ? network.chainName : item.destinationChain) : "";
   // An address link is only known for Arc's own explorer.
   const walletExplorerUrl = item && destinationChain === network.chainName ? `${network.explorerBase}/address/${item.wallet}` : null;
@@ -111,29 +120,48 @@ export default function SwapHistoryDetail() {
                 </ul>
 
                 <section className="mt-4 rounded-2xl border border-slate-200 p-4">
-                  <h2 className="text-base font-bold text-slate-900">Receipts</h2>
+                  <h2 className="text-base font-bold text-slate-900">Transactions</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Every on-chain transaction behind this {item.kind}. Paste a hash into the chain's block explorer to check it yourself.
+                  </p>
                   <ul className="mt-3 space-y-2">
-                    {(item.links || []).map((link) => (
-                      <ReceiptRow key={link.href} label={link.label} href={link.href} />
+                    {transactions.map((tx) => (
+                      <ReceiptRow
+                        key={`${tx.label}-${tx.hash}`}
+                        label={tx.chain && !tx.label.includes(tx.chain) ? `${tx.label} · ${tx.chain}` : tx.label}
+                        detail={tx.hash}
+                        copyValue={tx.hash}
+                        copyLabel="Copy transaction hash"
+                        href={tx.href}
+                        hrefLabel={`View ${tx.label} on explorer`}
+                      />
                     ))}
-                    <ReceiptRow label={`Sent to wallet: ${shortAddress(item.wallet)}`}>
-                      <CopyButton value={item.wallet} label="Copy wallet address" />
-                      {walletExplorerUrl && (
-                        <a href={walletExplorerUrl} target="_blank" rel="noreferrer" aria-label="View wallet on explorer" className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200">
-                          {EXTERNAL_ICON}
-                        </a>
-                      )}
-                    </ReceiptRow>
+                    <ReceiptRow
+                      label="Sent to wallet"
+                      detail={item.wallet}
+                      copyValue={item.wallet}
+                      copyLabel="Copy wallet address"
+                      href={walletExplorerUrl}
+                      hrefLabel="View wallet on explorer"
+                    />
                   </ul>
+                  {item.kind === "bridge" && !transactions.some((tx) => /destination|deliver/i.test(tx.label)) && (
+                    <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+                      The destination transaction on {item.destinationChain} was not recorded for this transfer. Look up your wallet on that chain's explorer to find it.
+                    </p>
+                  )}
+                  {transactions.length === 0 && (
+                    <p className="mt-3 text-xs text-slate-400">No transaction hash was saved for this record.</p>
+                  )}
                 </section>
 
                 <section className="mt-4 rounded-2xl border border-slate-200 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-base font-bold text-slate-900">Reference ID</h2>
+                    <h2 className="text-base font-bold text-slate-900">ProofPay reference ID</h2>
                     <CopyButton value={item.clientId} label="Copy reference ID" />
                   </div>
                   <p className="mt-2 break-all font-mono text-xs text-slate-600">{item.clientId}</p>
-                  <p className="mt-2 text-xs text-slate-400">Quote this if you ask for help with this {item.kind}.</p>
+                  <p className="mt-2 text-xs text-slate-400">ProofPay's own number for this record, not a blockchain ID. Quote it if you ask for help.</p>
                 </section>
               </>
             )}
