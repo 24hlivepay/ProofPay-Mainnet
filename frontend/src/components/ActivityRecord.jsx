@@ -1,6 +1,5 @@
 import { useState } from "react";
-
-const GLYPHS = { USDC: "$", EURC: "€", cirBTC: "₿" };
+import { ChainLogo, TokenLogo } from "./Logos";
 
 export function shortAddress(address) {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
@@ -40,36 +39,16 @@ function formatTime(timestamp) {
   return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-// A small mark for each chain, drawn here (brand color + a letter) rather than
-// loaded from a logo host, so the list never depends on an outside image.
-const CHAIN_MARKS = [
-  { match: /^arc\b/i, color: "#0f172a", glyph: "A" },
-  { match: /ethereum/i, color: "#627eea", glyph: "Ξ" },
-  { match: /base/i, color: "#0052ff", glyph: "B" },
-  { match: /arbitrum/i, color: "#28a0f0", glyph: "A" },
-  { match: /optimism/i, color: "#ff0420", glyph: "O" },
-  { match: /polygon/i, color: "#8247e5", glyph: "P" },
-  { match: /avalanche/i, color: "#e84142", glyph: "A" },
-];
-
-function chainMark(chain) {
-  return CHAIN_MARKS.find((mark) => mark.match.test(chain)) || { color: "#64748b", glyph: String(chain).slice(0, 1).toUpperCase() };
-}
-
-// The token's circle with its chain's mark on the corner, the way Jumper
-// shows which chain a token is on.
+// The token's logo with its chain's logo on the corner, the way Jumper shows
+// which chain a token is on.
 function TokenBadge({ symbol, chain }) {
-  const mark = chainMark(chain);
   return (
     <span className="relative flex h-11 w-11 shrink-0" aria-hidden="true">
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg font-bold text-blue-600 shadow-sm">
-        {GLYPHS[symbol] || String(symbol).slice(0, 1)}
+      <span className="h-11 w-11 overflow-hidden rounded-full shadow-sm ring-2 ring-white">
+        <TokenLogo symbol={symbol} />
       </span>
-      <span
-        className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-blue-50 text-[10px] font-bold leading-none text-white"
-        style={{ backgroundColor: mark.color }}
-      >
-        {mark.glyph}
+      <span className="absolute -bottom-1.5 -right-1.5 h-6 w-6 overflow-hidden rounded-full ring-2 ring-white">
+        <ChainLogo chain={chain} />
       </span>
     </span>
   );
