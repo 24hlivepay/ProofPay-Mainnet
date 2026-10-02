@@ -111,7 +111,7 @@ export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false, f
   const summary = (
     <>
       <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-sm">{isSwap ? (chainName ? `Swap on ${chainName}` : "Swap") : "Bridge"}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-sm">{isSwap ? "Swap" : "Bridge"}</span>
         <p className="text-xs text-slate-400">{formatDate(item.createdAt)} · {formatTime(item.createdAt)}</p>
       </div>
 
