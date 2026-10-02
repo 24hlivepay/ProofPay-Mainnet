@@ -8,6 +8,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import SuccessPanel from "../components/SuccessPanel";
+import ProgressDialog from "../components/ProgressDialog";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -79,6 +80,39 @@ const STEP_LABELS = {
   transfer: "Sent from source chain",
   mint: "Delivered on destination chain",
 };
+
+// The steps the progress dialog walks through, in order. "switch" is ours (the
+// wallet changing network); the rest map onto the SDK's step names. The SDK
+// emits an event once a step has finished, so a step's index + 1 is how many
+// are done.
+const PROGRESS_KEYS = ["switch", "approve", "send", "attest", "deliver"];
+
+function progressIndexForStep(name) {
+  const lower = String(name || "").toLowerCase();
+  if (/approve/.test(lower)) return 1;
+  if (/burn|transfer/.test(lower)) return 2;
+  if (/attest/.test(lower)) return 3;
+  if (/mint/.test(lower)) return 4;
+  return -1;
+}
+
+function linksFromSteps(steps) {
+  const links = {};
+  for (const step of steps || []) {
+    const index = progressIndexForStep(step.name);
+    if (index >= 0 && step.explorerUrl) links[PROGRESS_KEYS[index]] = step.explorerUrl;
+  }
+  return links;
+}
+
+// How many dialog steps a list of finished SDK steps covers. The wallet switch
+// has always happened by the time there are any steps.
+function progressFromSteps(steps) {
+  const done = (steps || [])
+    .filter((step) => step.state === "success")
+    .map((step) => progressIndexForStep(step.name));
+  return Math.max(1, ...done.map((index) => index + 1));
+}
 
 // The page promises "the amount you type is the amount that arrives", with
 // the bridge fee paid on top. How that is achieved depends on the route:
@@ -163,6 +197,13 @@ export default function Bridge() {
   // What the finished bridge moved, kept for the success screen after the
   // form itself has been cleared.
   const [receipt, setReceipt] = useState(null);
+  // Progress dialog: how many of PROGRESS_KEYS are finished, the explorer link
+  // each step has produced so far, whether the dialog is showing, and what
+  // this bridge is moving (a snapshot, because the form is cleared on success).
+  const [progress, setProgress] = useState(0);
+  const [stepLinks, setStepLinks] = useState({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogInfo, setDialogInfo] = useState(null);
   const [balances, setBalances] = useState({});
   // True while a bridge is in flight. A ref, not state: a second click that
   // lands before React re-renders the disabled button would otherwise start
@@ -386,12 +427,21 @@ export default function Bridge() {
     return labels[method] || "Working on your bridge...";
   }
 
-  async function runBridge(action) {
+  async function runBridge(action, { startProgress = 0 } = {}) {
     if (runningRef.current) return;
     runningRef.current = true;
     let provider;
+    // The SDK emits an event when a step has finished, so the message moves to
+    // the step that is now waiting.
+    const NEXT_STEP = { approve: "burn", burn: "fetchAttestation", transfer: "fetchAttestation", fetchAttestation: "mint", reAttest: "mint" };
     const handleEvent = (payload) => {
-      if (payload?.method) setMessage(describeStep(payload.method));
+      if (payload?.method) setMessage(describeStep(NEXT_STEP[payload.method] || payload.method));
+      const index = progressIndexForStep(payload?.method);
+      if (index >= 0) {
+        setProgress((current) => Math.max(current, index + 1));
+        const href = payload.values?.explorerUrl;
+        if (href) setStepLinks((current) => ({ ...current, [PROGRESS_KEYS[index]]: href }));
+      }
     };
 
     try {
@@ -400,9 +450,22 @@ export default function Bridge() {
       setFailedResult(null);
       setMessage(`Switching your wallet to ${sourceInfo.name}...`);
 
+      const quoted = summarizeQuote(estimate, token, amount);
+      setDialogInfo({
+        token,
+        sourceName: sourceInfo.name,
+        destinationName: destinationInfo.name,
+        sent: quoted ? quoted.walletTotal : Number(amount),
+        received: quoted ? quoted.receive : null,
+      });
+      setProgress(startProgress);
+      if (startProgress === 0) setStepLinks({});
+      setDialogOpen(true);
+
       const built = await buildAdapter();
       provider = built.provider;
       await ensureSourceChain(provider);
+      setProgress((current) => Math.max(current, 1));
 
       setMessage(describeStep("approve"));
       kit.on("*", handleEvent);
@@ -412,6 +475,8 @@ export default function Bridge() {
       if (result?.state === "error") {
         setFailedResult(result);
         const stepList = result.steps || [];
+        setProgress(progressFromSteps(stepList));
+        setStepLinks((current) => ({ ...current, ...linksFromSteps(stepList) }));
         const burned = stepList.some((step) => /burn|transfer/i.test(step.name) && step.state === "success");
         const failedStep = stepList.find((step) => step.state === "error");
         const reason = failedStep?.errorMessage ? ` Reason: ${String(failedStep.errorMessage).slice(0, 200)}` : "";
@@ -433,6 +498,11 @@ export default function Bridge() {
         received: done ? done.receive : null,
         steps: (result?.steps || []).filter((step) => step.explorerUrl),
       });
+      setProgress(PROGRESS_KEYS.length);
+      setStepLinks((current) => ({ ...current, ...linksFromSteps(result?.steps) }));
+      // Leave the finished checklist up a moment, then hand over to the
+      // "Bridge complete" screen the page already shows.
+      window.setTimeout(() => setDialogOpen(false), 2200);
       setStatus("done");
       setMessage("");
       setAmount("");
@@ -467,7 +537,10 @@ export default function Bridge() {
 
   // Quote again at the moment of sending so the fee added on top is current.
   const confirmBridge = () => runBridge(async (adapter) => kit.bridge((await quoteBridge(adapter)).params));
-  const retryBridge = () => runBridge((adapter) => kit.retryBridge(failedResult, { from: adapter, to: adapter }));
+  const retryBridge = () => runBridge(
+    (adapter) => kit.retryBridge(failedResult, { from: adapter, to: adapter }),
+    { startProgress: progressFromSteps(failedResult?.steps) }
+  );
 
   const summary = summarizeQuote(estimate, token, amount);
   const receiveAmount = summary ? Math.max(summary.receive, 0) : null;
@@ -510,9 +583,52 @@ export default function Bridge() {
     <span className="py-1 text-sm font-bold text-slate-900">{network.chainName}</span>
   );
 
+  const dialogPhase = status === "done" ? "done" : status === "error" ? "error" : "running";
+  const dialogSteps = dialogInfo
+    ? [
+        { key: "switch", label: `Switch to ${dialogInfo.sourceName}`, hint: "Approve the network switch in your wallet." },
+        { key: "approve", label: `Approve ${dialogInfo.token}`, hint: "Confirm the approval in your wallet." },
+        { key: "send", label: `Send ${dialogInfo.token} from ${dialogInfo.sourceName}`, hint: "Confirm the transfer in your wallet." },
+        { key: "attest", label: "Circle confirms the transfer", hint: "Waiting for Circle. This can take a few minutes." },
+        { key: "deliver", label: `Deliver to ${dialogInfo.destinationName}`, hint: "Circle sends it to your wallet." },
+      ].map((step, index) => ({
+        ...step,
+        href: stepLinks[step.key],
+        status: index < progress ? "done" : index === progress ? (dialogPhase === "error" ? "error" : "active") : "pending",
+      }))
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
+      {dialogInfo && (
+        <ProgressDialog
+          open={dialogOpen}
+          phase={dialogPhase}
+          title={
+            dialogPhase === "done"
+              ? "Bridge complete"
+              : dialogPhase === "error"
+                ? "Bridge stopped"
+                : `Bridging ${trimAmount(dialogInfo.sent)} ${dialogInfo.token}`
+          }
+          from={{ amount: `${trimAmount(dialogInfo.sent)} ${dialogInfo.token}`, chain: dialogInfo.sourceName }}
+          to={{
+            amount: dialogInfo.received !== null ? `${trimAmount(dialogInfo.received)} ${dialogInfo.token}` : dialogInfo.token,
+            chain: dialogInfo.destinationName,
+          }}
+          steps={dialogSteps}
+          message={dialogPhase === "done" ? `Your ${dialogInfo.token} is on ${dialogInfo.destinationName}.` : message}
+          note={
+            progress >= 3
+              ? "Your funds have left. You can close this window; the bridge finishes on its own."
+              : "Keep this window open and confirm each prompt in your wallet."
+          }
+          closable={dialogPhase !== "running" || progress >= 3}
+          onClose={() => setDialogOpen(false)}
+          onRetry={failedResult ? retryBridge : undefined}
+        />
+      )}
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h1 className="sr-only">Bridge</h1>
@@ -693,7 +809,14 @@ export default function Bridge() {
 
               <div className="mt-4">
                 {busy ? (
-                  <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
+                  <>
+                    <PrimaryButton disabled>{message || "Waiting for your wallet..."}</PrimaryButton>
+                    {!dialogOpen && (
+                      <button type="button" onClick={() => setDialogOpen(true)} className="mt-3 w-full text-center text-sm font-semibold text-blue-600 hover:text-blue-700">
+                        View progress
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <PrimaryButton onClick={confirmBridge} disabled={status !== "ready" || insufficient}>
                     {buttonLabel}
