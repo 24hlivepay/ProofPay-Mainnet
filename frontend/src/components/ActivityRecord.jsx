@@ -96,7 +96,7 @@ function Side({ label, amount, symbol, chain, trailing }) {
 // its chain, chain mark), and a chevron that opens the quick details. In the
 // list the card as a whole opens the full transaction page (onOpen); on that
 // page the same card is shown without it.
-export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false }) {
+export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false, footer = null }) {
   const [open, setOpen] = useState(defaultOpen);
   const isSwap = item.kind === "swap";
   const from = isSwap
@@ -168,14 +168,17 @@ export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false })
       ) : summary}
 
       {open && (
-        <dl className="mt-4 space-y-2 border-t border-blue-200 pt-3">
-          <DetailLine label="Destination" value={shortAddress(item.wallet)} note={`your wallet on ${to.chain}`} />
-          {(item.fees || []).map((fee) => (
-            <DetailLine key={`${fee.label}-${fee.token}`} label={fee.label} value={`${fee.amount} ${fee.token}`} />
-          ))}
-          {rate && <DetailLine label="Exchange rate" value={rate} />}
-          {took && <DetailLine label="Time taken" value={took} />}
-        </dl>
+        <div className="mt-4 border-t border-blue-200 pt-3">
+          <dl className="space-y-2">
+            <DetailLine label="Destination" value={shortAddress(item.wallet)} note={`your wallet on ${to.chain}`} />
+            {(item.fees || []).map((fee) => (
+              <DetailLine key={`${fee.label}-${fee.token}`} label={fee.label} value={`${fee.amount} ${fee.token}`} />
+            ))}
+            {rate && <DetailLine label="Exchange rate" value={rate} />}
+            {took && <DetailLine label="Time taken" value={took} />}
+          </dl>
+          {footer}
+        </div>
       )}
     </li>
   );
