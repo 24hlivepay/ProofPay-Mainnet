@@ -209,7 +209,7 @@ export default function SwapHistoryDetail() {
                       />
                     ))}
                     <ReceiptRow
-                      label="Sent to wallet"
+                      label="Your wallet (source and destination)"
                       detail={item.wallet}
                       copyValue={item.wallet}
                       copyLabel="Copy wallet address"

@@ -111,7 +111,7 @@ export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false, f
   const summary = (
     <>
       <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-sm">{isSwap ? "Swap" : "Bridge"}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-sm">{isSwap ? (chainName ? `Swap on ${chainName}` : "Swap") : "Bridge"}</span>
         <p className="text-xs text-slate-400">{formatDate(item.createdAt)} · {formatTime(item.createdAt)}</p>
       </div>
 
@@ -170,7 +170,11 @@ export function ActivityRecord({ item, chainName, onOpen, defaultOpen = false, f
       {open && (
         <div className="mt-4 border-t border-blue-200 pt-3">
           <dl className="space-y-2">
-            <DetailLine label="Destination" value={shortAddress(item.wallet)} note={`your wallet on ${to.chain}`} />
+            <DetailLine
+              label="Your wallet"
+              value={shortAddress(item.wallet)}
+              note={isSwap ? `swapped on ${to.chain}` : `source and destination: sent from ${from.chain}, received on ${to.chain}`}
+            />
             {(item.fees || []).map((fee) => (
               <DetailLine key={`${fee.label}-${fee.token}`} label={fee.label} value={`${fee.amount} ${fee.token}`} />
             ))}
