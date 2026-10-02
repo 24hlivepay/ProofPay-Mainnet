@@ -1445,7 +1445,11 @@ app.post("/api/swap/circle", async (req, res) => {
       tokenAddress: inInfo.tokenAddress,
       owner: params.walletAddress,
       spender: quote.estimate.approvalAddress,
-    }).catch(() => 0n); // if the read fails, fall through to approving as before
+    }).catch(() => {
+      mark("allowance: read failed, approving as before");
+      return 0n;
+    }); // if the read fails, fall through to approving as before
+    mark("allowance-checked");
 
     if (currentAllowance < BigInt(quote.action.fromAmount)) {
       job.step = "approve";
