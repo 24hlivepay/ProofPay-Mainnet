@@ -85,6 +85,12 @@ const PROGRESS_KEYS = ["switch", "approve", "send", "attest", "deliver"];
 // What each finished step is called in the History list.
 const STEP_LABELS = ["Network switch", "Approval", "Sent from source chain", "Circle confirmation", "Delivered on destination chain"];
 
+function historyStepLabel(index, name, sourceName, destinationName) {
+  if (index === 2) return `Sent from ${sourceName}`;
+  if (index === 4) return `Delivered on ${destinationName}`;
+  return STEP_LABELS[index] || name;
+}
+
 function progressIndexForStep(name) {
   const lower = String(name || "").toLowerCase();
   if (/approve/.test(lower)) return 1;
@@ -511,7 +517,7 @@ export default function Bridge() {
         durationSec: Math.round((Date.now() - startedAt) / 1000),
         links: (result?.steps || [])
           .filter((step) => step.explorerUrl)
-          .map((step) => ({ label: STEP_LABELS[progressIndexForStep(step.name)] || step.name, href: step.explorerUrl })),
+          .map((step) => ({ label: historyStepLabel(progressIndexForStep(step.name), step.name, sourceInfo.name, destinationInfo.name), href: step.explorerUrl })),
       });
       // The dialog is the completion screen: it stays until the user presses
       // OK (also reopened if they had closed it while the bridge ran).
