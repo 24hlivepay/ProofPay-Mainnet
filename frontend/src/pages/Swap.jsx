@@ -8,6 +8,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import SuccessPanel from "../components/SuccessPanel";
+import ProgressDialog from "../components/ProgressDialog";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -103,6 +104,14 @@ export default function Swap() {
   // What the finished swap moved, kept for the success screen after the form
   // itself has been cleared.
   const [receipt, setReceipt] = useState(null);
+  // Circle (email) wallets: one dialog stays open for the whole swap while
+  // Circle's own PIN window opens on top of it for each approval. swapStage is
+  // the step in flight; needsApprove is only learned once the backend asks for
+  // the approval challenge (it skips it when the allowance is already enough).
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogInfo, setDialogInfo] = useState(null);
+  const [swapStage, setSwapStage] = useState("prepare"); // prepare | approve | swap | confirm | done
+  const [needsApprove, setNeedsApprove] = useState(false);
   const [balances, setBalances] = useState({});
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [prices, setPrices] = useState({});
@@ -340,6 +349,8 @@ export default function Swap() {
 
       if (job.status === "awaiting-approval" && job.challengeId && !handledChallengeIds.has(job.challengeId)) {
         handledChallengeIds.add(job.challengeId);
+        if (job.step === "approve") setNeedsApprove(true);
+        setSwapStage(job.step === "approve" ? "approve" : "swap");
         setMessage(
           job.step === "approve"
             ? `Approve access to your ${tokenIn} with your PIN...`
@@ -361,6 +372,7 @@ export default function Swap() {
             action: job.step === "approve" ? "Approve" : "Swap",
           },
         });
+        setSwapStage(job.step === "approve" ? "swap" : "confirm");
         setMessage("Finishing your swap...");
       }
 
@@ -381,9 +393,13 @@ export default function Swap() {
       setMessage("");
 
       if (isCircleWallet) {
+        setDialogInfo({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
+        setNeedsApprove(false);
+        setSwapStage("prepare");
+        setDialogOpen(true);
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
-        setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
+        setSwapStage("done");
         setStatus("done");
         setAmountIn("");
         setEstimate(null);
@@ -408,6 +424,32 @@ export default function Swap() {
   }
 
   const busy = status === "swapping";
+
+  // The finished dialog is the completion screen; OK returns to a clean form.
+  function closeDialog() {
+    setDialogOpen(false);
+    if (status === "done") {
+      setTxHash("");
+      setStatus("idle");
+    }
+  }
+
+  const dialogPhase = status === "done" ? "done" : status === "error" ? "error" : "running";
+  let dialogSteps = [];
+  if (dialogInfo) {
+    const defs = [
+      { key: "prepare", label: "Finding your route", hint: "Getting the quote from Circle." },
+      ...(needsApprove ? [{ key: "approve", label: `Allow ${dialogInfo.tokenIn}`, hint: "Enter your PIN in the Circle window." }] : []),
+      { key: "swap", label: `Swap ${dialogInfo.paid} ${dialogInfo.tokenIn} for ${dialogInfo.tokenOut}`, hint: "Enter your PIN in the Circle window." },
+      { key: "confirm", label: `Confirming on ${network.chainName}`, hint: "Waiting for the network. This takes a few seconds." },
+    ];
+    const current = swapStage === "done" ? defs.length : defs.findIndex((step) => step.key === swapStage);
+    dialogSteps = defs.map((step, index) => ({
+      ...step,
+      href: step.key === "confirm" && txHash ? `${network.explorerBase}/tx/${txHash}` : undefined,
+      status: index < current ? "done" : index === current ? (dialogPhase === "error" ? "error" : "active") : "pending",
+    }));
+  }
   const balanceIn = balances[tokenIn];
   const insufficient = balanceIn !== undefined && Number(amountIn) > Number(balanceIn);
   const outputAmount = estimate?.estimatedOutput?.amount;
@@ -440,6 +482,20 @@ export default function Swap() {
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
+      {dialogInfo && (
+        <ProgressDialog
+          open={dialogOpen}
+          phase={dialogPhase}
+          title={dialogPhase === "done" ? "Swap complete" : dialogPhase === "error" ? "Swap stopped" : `Swapping ${dialogInfo.paid} ${dialogInfo.tokenIn}`}
+          from={{ amount: `${dialogInfo.paid} ${dialogInfo.tokenIn}`, chain: network.chainName }}
+          to={{ amount: dialogInfo.received ? `${dialogInfo.received} ${dialogInfo.tokenOut}` : dialogInfo.tokenOut, chain: network.chainName }}
+          steps={dialogSteps}
+          message={dialogPhase === "done" ? `Your ${dialogInfo.tokenOut} is in your wallet on ${network.chainName}.` : message}
+          note="Enter your PIN when the Circle window opens, and keep this page open."
+          closable={dialogPhase !== "running"}
+          onClose={closeDialog}
+        />
+      )}
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
         <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <h1 className="sr-only">Swap</h1>
