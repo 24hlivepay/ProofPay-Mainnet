@@ -49,6 +49,7 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
+import { shouldRecordOnrampEvent, recordOnrampPurchase } from "./lib/onrampWebhook.js";
 import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
 import { handleUpload as handleClientUpload } from "@vercel/blob/client";
@@ -247,6 +248,7 @@ const walletConnectionsFile = path.join(dataDirectory, "wallet-connections.json"
 const adminStateFile = path.join(dataDirectory, "admin-2fa-state.json");
 const adminAuditLogFile = path.join(dataDirectory, "admin-audit-log.json");
 const profilesFile = path.join(dataDirectory, "profiles.json");
+const onrampPurchasesFile = path.join(dataDirectory, "onramp-purchases.json");
 const evidenceDirectory = path.join(dataDirectory, "evidence");
 const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
@@ -637,6 +639,37 @@ function readProfilesLocal() {
     return {};
   }
 }
+
+// ── Onramp purchase webhook -- local-file helper, used only without DATABASE_URL ──
+function readOnrampPurchasesLocal() {
+  try {
+    if (!fs.existsSync(onrampPurchasesFile)) return {};
+    return JSON.parse(fs.readFileSync(onrampPurchasesFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+// See backend/lib/onrampWebhook.js for the full context on why this exists
+// and what's still unconfirmed about its exact payload shape/signature
+// scheme -- Circle's own docs say twice that onramp webhooks are the
+// source of truth for deposit completion, but no dedicated server-side
+// payload/signature reference could be found despite extensive searching.
+app.post("/api/onramp/webhook", async (req, res) => {
+  await ensureDatabase();
+  try {
+    if (shouldRecordOnrampEvent(req.body)) {
+      const nextLocal = await recordOnrampPurchase(databasePool, req.body, readOnrampPurchasesLocal());
+      if (nextLocal) fs.writeFileSync(onrampPurchasesFile, JSON.stringify(nextLocal, null, 2));
+    }
+  } catch (error) {
+    console.error("[ProofPay] Onramp webhook processing failed:", error.message);
+    // Still acknowledge with 200 below -- Circle's general webhook system
+    // retries on non-2xx, and a malformed/unexpected payload here isn't
+    // something a retry would fix.
+  }
+  return res.sendStatus(200);
+});
 
 // A user's own profile only: the address always comes from the verified JWT,
 // never from the request, so one wallet cannot read or overwrite another's.
