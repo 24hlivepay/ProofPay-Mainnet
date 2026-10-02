@@ -1235,7 +1235,10 @@ const SWAP_RPC_URL_BY_NETWORK = {
 const ERC20_ALLOWANCE_ABI = ["function allowance(address owner, address spender) view returns (uint256)"];
 
 async function getSwapAllowance({ network, tokenAddress, owner, spender }) {
-  const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network]);
+  // The chain id is known, so ethers is told it (staticNetwork) instead of
+  // detecting it with extra calls, which showed up as seconds in the swap.
+  const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
+  const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network], chainId, { staticNetwork: ethers.Network.from(chainId) });
   const token = new ethers.Contract(tokenAddress, ERC20_ALLOWANCE_ABI, provider);
   return token.allowance(owner, spender);
 }
