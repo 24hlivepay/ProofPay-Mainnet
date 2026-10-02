@@ -33,7 +33,10 @@ const BRIDGE_ROUTES = {
     arc: "Arc",
     chains: {
       USDC: ["Ethereum", "Base", "Arbitrum", "Optimism", "Polygon", "Avalanche"],
-      EURC: ["Ethereum", "Base", "Avalanche"],
+      // Avalanche is left out on purpose: Circle's CCTPx registry has EURC
+      // switched off there (quote answers TOKEN_NOT_SUPPORTED_ON_ROUTE, both
+      // directions), so listing it only produced a "quote failed" error.
+      EURC: ["Ethereum", "Base"],
     },
   },
   testnet: {
@@ -358,7 +361,13 @@ export default function Bridge() {
       setStatus("ready");
     } catch (error) {
       setStatus("error");
-      setMessage(error.message || "Could not get a quote for this bridge.");
+      // A bare "request failed with status 400" from the fee-quote service
+      // means that chain/token pair is not being served right now.
+      setMessage(
+        /status 400/i.test(error?.message || "")
+          ? `${token} can't be bridged between ${sourceInfo.name} and ${destinationInfo.name} right now. Try another chain.`
+          : error.message || "Could not get a quote for this bridge."
+      );
     }
   }
 
