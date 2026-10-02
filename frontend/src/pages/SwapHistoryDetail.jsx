@@ -6,6 +6,7 @@ import { ActivityRecord, shortAddress } from "../components/ActivityRecord";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { getNetworkConfig } from "../config/network";
 import { fetchActivity } from "../services/activity";
+import { findDestinationTransaction } from "../services/bridgeDestination";
 
 const EXTERNAL_ICON = (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -87,15 +88,42 @@ export default function SwapHistoryDetail() {
     if (walletAddress) load();
   }, [walletAddress, load]);
 
-  // Newer records carry every transaction with its hash; older ones only had
-  // explorer links, so take the hash out of the link.
-  const transactions = item
+  const [destination, setDestination] = useState(null); // { state, hash?, href? } | { state: "error" } | null
+
+  const recordedTransactions = item
     ? item.transactions?.length
       ? item.transactions
       : (item.links || [])
           .map((link) => ({ label: link.label, hash: link.href.match(HASH)?.[0], href: link.href }))
           .filter((tx) => tx.hash)
     : [];
+  const needsDestination = item?.kind === "bridge" && !recordedTransactions.some((tx) => /destination|deliver/i.test(tx.label));
+  const sourceTx = recordedTransactions.find((tx) => /source|sent from/i.test(tx.label)) || recordedTransactions[recordedTransactions.length - 1];
+
+  const lookUpDestination = useCallback(async () => {
+    if (!needsDestination || !sourceTx) return;
+    setDestination(null);
+    try {
+      setDestination(await findDestinationTransaction({
+        sourceChain: item.sourceChain,
+        destinationChain: item.destinationChain,
+        sourceHash: sourceTx.hash,
+        network,
+      }));
+    } catch {
+      setDestination({ state: "error" });
+    }
+  }, [needsDestination, sourceTx?.hash, item?.sourceChain, item?.destinationChain]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    lookUpDestination();
+  }, [lookUpDestination]);
+
+  // Newer records carry every transaction with its hash; older ones only had
+  // explorer links, so take the hash out of the link.
+  const transactions = destination?.state === "found"
+    ? [...recordedTransactions, { label: "Destination transaction", chain: item.destinationChain, hash: destination.hash, href: destination.href }]
+    : recordedTransactions;
   const destinationChain = item ? (item.kind === "swap" ? network.chainName : item.destinationChain) : "";
   // An address link is only known for Arc's own explorer.
   const walletExplorerUrl = item && destinationChain === network.chainName ? `${network.explorerBase}/address/${item.wallet}` : null;
@@ -189,10 +217,17 @@ export default function SwapHistoryDetail() {
                       hrefLabel="View wallet on explorer"
                     />
                   </ul>
-                  {item.kind === "bridge" && !transactions.some((tx) => /destination|deliver/i.test(tx.label)) && (
-                    <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
-                      The destination transaction on {item.destinationChain} was not recorded for this transfer. Look up your wallet on that chain's explorer to find it.
-                    </p>
+                  {needsDestination && destination?.state !== "found" && (
+                    <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+                      {destination === null
+                        ? "Looking up the destination transaction..."
+                        : destination.state === "pending"
+                          ? `The destination transaction on ${item.destinationChain} is not available yet. Circle may still be delivering it.`
+                          : `The destination transaction on ${item.destinationChain} could not be found for this transfer. Look up your wallet on that chain's explorer.`}
+                      {destination?.state === "pending" || destination?.state === "error" ? (
+                        <button type="button" onClick={lookUpDestination} className="ml-2 font-semibold underline">Check again</button>
+                      ) : null}
+                    </div>
                   )}
                   {transactions.length === 0 && (
                     <p className="mt-3 text-xs text-slate-400">No transaction hash was saved for this record.</p>
