@@ -110,7 +110,7 @@ export default function ProgressDialog({
         {phase === "done" && (
           <div className="mt-5">
             <p className="mb-3 text-center text-sm font-semibold text-green-700">{message}</p>
-            <PrimaryButton onClick={onClose}>Done</PrimaryButton>
+            <PrimaryButton onClick={onClose}>OK</PrimaryButton>
           </div>
         )}
 
