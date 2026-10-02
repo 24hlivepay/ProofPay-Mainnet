@@ -11,62 +11,99 @@ const FILTERS = [
   { key: "bridge", label: "Bridges" },
 ];
 
-function formatTime(timestamp) {
-  return new Date(timestamp).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const GLYPHS = { USDC: "$", EURC: "€", cirBTC: "₿" };
+
+function formatDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 }
 
-function TypeIcon({ kind }) {
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function TokenBadge({ symbol }) {
   return (
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-      {kind === "swap" ? (
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M7 4v14M7 18l-3-3M7 18l3-3M17 20V6M17 6l-3 3M17 6l3 3" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 17h18M3 17l4-4M3 17l4 4M21 7H3M21 7l-4-4M21 7l-4 4" />
-        </svg>
-      )}
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg font-bold text-blue-600" aria-hidden="true">
+      {GLYPHS[symbol] || String(symbol).slice(0, 1)}
     </span>
   );
 }
 
-function HistoryRow({ item, chainName }) {
-  const isSwap = item.kind === "swap";
+// One side of a swap or bridge: the amount, then which token on which chain.
+function Side({ label, amount, symbol, chain, trailing }) {
   return (
-    <li className="flex gap-3 rounded-2xl border border-slate-200 p-4">
-      <TypeIcon kind={item.kind} />
+    <div className="flex items-center gap-3">
+      <TokenBadge symbol={symbol} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isSwap ? "Swap" : "Bridge"}</p>
-          <p className="shrink-0 text-xs text-slate-400">{formatTime(item.createdAt)}</p>
-        </div>
-        {isSwap ? (
-          <>
-            <p className="mt-1 font-bold text-slate-900">
-              {item.amountIn} {item.tokenIn} <span className="text-slate-400">→</span> {item.amountOut ? `${item.amountOut} ` : ""}{item.tokenOut}
-            </p>
-            <p className="text-sm text-slate-500">on {chainName}</p>
-          </>
-        ) : (
-          <>
-            <p className="mt-1 font-bold text-slate-900">{item.sent} {item.token}</p>
-            <p className="text-sm text-slate-500">
-              {item.sourceChain} <span className="text-slate-400">→</span> {item.destinationChain}
-            </p>
-            {item.received && <p className="text-sm text-slate-500">{item.received} {item.token} arrived</p>}
-          </>
-        )}
-        {item.links?.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            {item.links.map((link) => (
-              <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">
-                {link.label} ↗
-              </a>
-            ))}
-          </div>
-        )}
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+        <p className="truncate text-xl font-bold text-slate-900">{amount ?? "—"}</p>
+        <p className="truncate text-sm text-slate-500">
+          <span className="font-semibold text-slate-700">{symbol}</span> on {chain}
+        </p>
       </div>
+      {trailing}
+    </div>
+  );
+}
+
+function HistoryCard({ item, chainName }) {
+  const [open, setOpen] = useState(false);
+  const isSwap = item.kind === "swap";
+  const from = isSwap
+    ? { amount: item.amountIn, symbol: item.tokenIn, chain: chainName }
+    : { amount: item.sent, symbol: item.token, chain: item.sourceChain };
+  const to = isSwap
+    ? { amount: item.amountOut, symbol: item.tokenOut, chain: chainName }
+    : { amount: item.received, symbol: item.token, chain: item.destinationChain };
+  const hasLinks = item.links?.length > 0;
+
+  return (
+    <li className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{isSwap ? "Swap" : "Bridge"}</span>
+        <p className="text-xs text-slate-400">{formatDate(item.createdAt)} · {formatTime(item.createdAt)}</p>
+      </div>
+
+      <div className="mt-4">
+        <Side label="From" {...from} />
+        <div className="my-1 ml-[18px] flex h-6 items-center" aria-hidden="true">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-400">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M6 13l6 6 6-6" />
+            </svg>
+          </span>
+        </div>
+        <Side
+          label="To"
+          {...to}
+          trailing={hasLinks && (
+            <button
+              type="button"
+              onClick={() => setOpen((value) => !value)}
+              aria-expanded={open}
+              aria-label={open ? "Hide details" : "Show details"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+            >
+              <svg viewBox="0 0 24 24" className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          )}
+        />
+      </div>
+
+      {open && hasLinks && (
+        <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+          {item.links.map((link) => (
+            <li key={link.href} className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-slate-600"><span className="text-green-600">✓</span> {link.label}</span>
+              <a href={link.href} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-semibold text-blue-700 hover:underline">
+                View on explorer ↗
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
 }
@@ -157,7 +194,7 @@ export default function SwapHistory() {
               </div>
             ) : (
               <ul className="space-y-3">
-                {visible.map((item) => <HistoryRow key={item.clientId} item={item} chainName={network.chainName} />)}
+                {visible.map((item) => <HistoryCard key={item.clientId} item={item} chainName={network.chainName} />)}
               </ul>
             )}
           </div>
