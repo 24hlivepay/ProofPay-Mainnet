@@ -1235,7 +1235,10 @@ const SWAP_RPC_URL_BY_NETWORK = {
 const ERC20_ALLOWANCE_ABI = ["function allowance(address owner, address spender) view returns (uint256)"];
 
 async function getSwapAllowance({ network, tokenAddress, owner, spender }) {
-  const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network]);
+  // The chain id is known, so ethers is told it (staticNetwork) instead of
+  // detecting it with extra calls, which showed up as seconds in the swap.
+  const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
+  const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network], chainId, { staticNetwork: ethers.Network.from(chainId) });
   const token = new ethers.Contract(tokenAddress, ERC20_ALLOWANCE_ABI, provider);
   return token.allowance(owner, spender);
 }
@@ -1530,16 +1533,33 @@ app.post("/api/swap/circle", async (req, res) => {
     }
 
     job.step = "swap";
+    // The quote above is as old as the approval took (a PIN and a confirmation,
+    // 30 s or more). A route and minimum output that old can fail the swap's
+    // gas estimation (ESTIMATION_ERROR), so after an approval the quote is
+    // asked for again. Only used if it is for the same spender the allowance
+    // was just given to.
+    let swapQuote = quote;
+    if (approveTxHash) {
+      try {
+        const refreshed = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
+        if (refreshed?.quote?.estimate?.approvalAddress?.toLowerCase() === quote.estimate.approvalAddress.toLowerCase()) {
+          swapQuote = refreshed.quote;
+          mark("swap: quote refreshed");
+        }
+      } catch {
+        // keep the original quote
+      }
+    }
     const nativeValue =
-      quote.transactionRequest.value && quote.transactionRequest.value !== "0x0"
-        ? ethers.formatUnits(BigInt(quote.transactionRequest.value), 18)
+      swapQuote.transactionRequest.value && swapQuote.transactionRequest.value !== "0x0"
+        ? ethers.formatUnits(BigInt(swapQuote.transactionRequest.value), 18)
         : null;
     const swapChallengeId = await createCircleContractChallenge({
       network,
       userToken,
       walletId: params.walletId,
-      contractAddress: quote.transactionRequest.to,
-      callData: quote.transactionRequest.data,
+      contractAddress: swapQuote.transactionRequest.to,
+      callData: swapQuote.transactionRequest.data,
       amount: nativeValue,
     });
     job.challengeId = swapChallengeId;
