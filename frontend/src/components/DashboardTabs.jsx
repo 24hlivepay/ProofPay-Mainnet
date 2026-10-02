@@ -13,6 +13,7 @@ const TABS = [
 
 function matchesTab(pathname, tab) {
   if (tab.key === "escrows") return pathname.startsWith("/dashboard");
+  if (tab.key === "swap-bridge") return pathname.startsWith("/swap") || pathname.startsWith("/bridge");
   return pathname.startsWith(tab.to);
 }
 

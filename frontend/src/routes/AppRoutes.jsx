@@ -29,6 +29,7 @@ import AdminAuditLog from "../pages/AdminAuditLog";
 import Onramp from "../pages/Onramp";
 import Swap from "../pages/Swap";
 import Bridge from "../pages/Bridge";
+import SwapHistory from "../pages/SwapHistory";
 import AdminContracts from "../pages/AdminContracts";
 import OrderHistory from "../pages/OrderHistory";
 import Profile from "../pages/Profile";
@@ -121,6 +122,7 @@ export default function AppRoutes() {
       <Route path="/onramp" element={<Onramp />} />
       <Route path="/swap" element={<Swap />} />
       <Route path="/bridge" element={<Bridge />} />
+      <Route path="/swap-history" element={<SwapHistory />} />
       <Route path="/admin/contracts" element={<AdminContracts />} />
 
       {/* Seller */}

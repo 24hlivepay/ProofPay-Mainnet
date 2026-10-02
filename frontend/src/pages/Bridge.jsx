@@ -8,6 +8,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import ProgressDialog from "../components/ProgressDialog";
+import { recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -77,6 +78,9 @@ const kit = new AppKit();
 // emits an event once a step has finished, so a step's index + 1 is how many
 // are done.
 const PROGRESS_KEYS = ["switch", "approve", "send", "attest", "deliver"];
+
+// What each finished step is called in the History list.
+const STEP_LABELS = ["Network switch", "Approval", "Sent from source chain", "Circle confirmation", "Delivered on destination chain"];
 
 function progressIndexForStep(name) {
   const lower = String(name || "").toLowerCase();
@@ -479,6 +483,17 @@ export default function Bridge() {
 
       setProgress(PROGRESS_KEYS.length);
       setStepLinks((current) => ({ ...current, ...linksFromSteps(result?.steps) }));
+      recordActivity({
+        kind: "bridge",
+        token,
+        sourceChain: sourceInfo.name,
+        destinationChain: destinationInfo.name,
+        sent: String(quoted ? quoted.walletTotal : Number(result?.amount || amount)),
+        received: quoted ? String(quoted.receive) : null,
+        links: (result?.steps || [])
+          .filter((step) => step.explorerUrl)
+          .map((step) => ({ label: STEP_LABELS[progressIndexForStep(step.name)] || step.name, href: step.explorerUrl })),
+      });
       // The dialog is the completion screen: it stays until the user presses
       // OK (also reopened if they had closed it while the bridge ran).
       setDialogOpen(true);
