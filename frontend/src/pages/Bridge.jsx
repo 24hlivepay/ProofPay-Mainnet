@@ -7,7 +7,6 @@ import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
-import SuccessPanel from "../components/SuccessPanel";
 import ProgressDialog from "../components/ProgressDialog";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
@@ -72,14 +71,6 @@ const CHAIN_INFO = Object.fromEntries(
 );
 
 const kit = new AppKit();
-
-// Plain names for the SDK's step names on the success screen.
-const STEP_LABELS = {
-  approve: "Approval",
-  burn: "Sent from source chain",
-  transfer: "Sent from source chain",
-  mint: "Delivered on destination chain",
-};
 
 // The steps the progress dialog walks through, in order. "switch" is ours (the
 // wallet changing network); the rest map onto the SDK's step names. The SDK
@@ -194,9 +185,6 @@ export default function Bridge() {
   const [message, setMessage] = useState("");
   const [steps, setSteps] = useState([]);
   const [failedResult, setFailedResult] = useState(null);
-  // What the finished bridge moved, kept for the success screen after the
-  // form itself has been cleared.
-  const [receipt, setReceipt] = useState(null);
   // Progress dialog: how many of PROGRESS_KEYS are finished, the explorer link
   // each step has produced so far, whether the dialog is showing, and what
   // this bridge is moving (a snapshot, because the form is cleared on success).
@@ -489,20 +477,11 @@ export default function Bridge() {
         return;
       }
 
-      const done = summarizeQuote(estimate, token, amount);
-      setReceipt({
-        token,
-        sourceName: sourceInfo.name,
-        destinationName: destinationInfo.name,
-        sent: done ? done.walletTotal : Number(result?.amount || amount),
-        received: done ? done.receive : null,
-        steps: (result?.steps || []).filter((step) => step.explorerUrl),
-      });
       setProgress(PROGRESS_KEYS.length);
       setStepLinks((current) => ({ ...current, ...linksFromSteps(result?.steps) }));
-      // Leave the finished checklist up a moment, then hand over to the
-      // "Bridge complete" screen the page already shows.
-      window.setTimeout(() => setDialogOpen(false), 2200);
+      // The dialog is the completion screen: it stays until the user presses
+      // OK (also reopened if they had closed it while the bridge ran).
+      setDialogOpen(true);
       setStatus("done");
       setMessage("");
       setAmount("");
@@ -583,6 +562,15 @@ export default function Bridge() {
     <span className="py-1 text-sm font-bold text-slate-900">{network.chainName}</span>
   );
 
+  // Closing the finished dialog is the user's OK: back to a clean form.
+  function closeDialog() {
+    setDialogOpen(false);
+    if (status === "done") {
+      setSteps([]);
+      setStatus("idle");
+    }
+  }
+
   const dialogPhase = status === "done" ? "done" : status === "error" ? "error" : "running";
   const dialogSteps = dialogInfo
     ? [
@@ -625,7 +613,7 @@ export default function Bridge() {
               : "Keep this window open and confirm each prompt in your wallet."
           }
           closable={dialogPhase !== "running" || progress >= 3}
-          onClose={() => setDialogOpen(false)}
+          onClose={closeDialog}
           onRetry={failedResult ? retryBridge : undefined}
         />
       )}
@@ -674,25 +662,6 @@ export default function Bridge() {
               Bridge works with browser wallets like MetaMask for now. Support for email sign-in
               wallets is coming later.
             </p>
-          ) : status === "done" && receipt ? (
-            <SuccessPanel
-              title="Bridge complete"
-              subtitle={`Your ${receipt.token} is on ${receipt.destinationName}.`}
-              rows={[
-                { label: "Sent", value: `${trimAmount(receipt.sent)} ${receipt.token}`, note: `from ${receipt.sourceName}` },
-                ...(receipt.received !== null
-                  ? [{ label: "Received", value: `${trimAmount(receipt.received)} ${receipt.token}`, note: `on ${receipt.destinationName}` }]
-                  : []),
-                { label: "Recipient", value: shortAddress, note: "your wallet" },
-              ]}
-              links={receipt.steps.map((step) => ({ label: STEP_LABELS[step.name.toLowerCase()] || step.name, href: step.explorerUrl }))}
-              doneLabel="Bridge again"
-              onDone={() => {
-                setReceipt(null);
-                setSteps([]);
-                setStatus("idle");
-              }}
-            />
           ) : (
             <div className="mt-5">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 focus-within:border-blue-500">
