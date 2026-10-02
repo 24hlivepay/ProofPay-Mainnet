@@ -9,6 +9,7 @@ import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import SuccessPanel from "../components/SuccessPanel";
 import ProgressDialog from "../components/ProgressDialog";
+import { recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -385,6 +386,19 @@ export default function Swap() {
     throw new Error("The swap is still processing. Check your wallet activity before retrying.");
   }
 
+  // Adds the finished swap to the user's History. The paid amount and the
+  // quoted amount received are what the page showed at confirm time.
+  function recordSwap(hash) {
+    recordActivity({
+      kind: "swap",
+      tokenIn,
+      tokenOut,
+      amountIn,
+      amountOut: estimate?.estimatedOutput?.amount || null,
+      links: hash ? [{ label: "Swap transaction", href: `${network.explorerBase}/tx/${hash}` }] : [],
+    });
+  }
+
   async function confirmSwap() {
     if (runningRef.current) return;
     runningRef.current = true;
@@ -399,6 +413,7 @@ export default function Swap() {
         setDialogOpen(true);
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
+        recordSwap(result?.transactionHash);
         setSwapStage("done");
         setStatus("done");
         setAmountIn("");
@@ -410,6 +425,7 @@ export default function Swap() {
       const adapter = await buildAdapter();
       const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
       setTxHash(result?.transactionHash || result?.hash || "");
+      recordSwap(result?.transactionHash || result?.hash);
       setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
       setStatus("done");
       setAmountIn("");

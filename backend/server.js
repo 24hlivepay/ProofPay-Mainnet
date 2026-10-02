@@ -48,6 +48,7 @@ import {
   logAdminAction,
   getAuditLog,
 } from "./lib/adminAuth.js";
+import { sanitizeActivity, recordActivity, listActivity } from "./lib/activity.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
@@ -247,6 +248,7 @@ const walletConnectionsFile = path.join(dataDirectory, "wallet-connections.json"
 const adminStateFile = path.join(dataDirectory, "admin-2fa-state.json");
 const adminAuditLogFile = path.join(dataDirectory, "admin-audit-log.json");
 const profilesFile = path.join(dataDirectory, "profiles.json");
+const activityFile = path.join(dataDirectory, "swap-bridge-activity.json");
 const evidenceDirectory = path.join(dataDirectory, "evidence");
 const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
@@ -653,6 +655,33 @@ app.put("/api/profile", requireAuth(), async (req, res) => {
   const nextLocal = await saveProfile(databasePool, req.auth.address, profile, readProfilesLocal());
   if (nextLocal) fs.writeFileSync(profilesFile, JSON.stringify(nextLocal, null, 2));
   return res.json({ success: true, profile });
+});
+
+// ── Swap / Bridge history ────────────────────────────────────────────────────
+// The browser reports a finished swap or bridge; the wallet comes from the JWT,
+// never the body, so one wallet cannot write into or read another's history.
+function readActivityLocal() {
+  try {
+    if (!fs.existsSync(activityFile)) return [];
+    return JSON.parse(fs.readFileSync(activityFile, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+app.get("/api/activity", requireAuth(), async (req, res) => {
+  await ensureDatabase();
+  const activity = await listActivity(databasePool, req.auth.address, getRequestNetwork(req), readActivityLocal());
+  return res.json({ success: true, activity });
+});
+
+app.post("/api/activity", requireAuth(), async (req, res) => {
+  const { entry, error } = sanitizeActivity(req.body);
+  if (error) return res.status(400).json({ success: false, message: error });
+  await ensureDatabase();
+  const nextLocal = await recordActivity(databasePool, req.auth.address, getRequestNetwork(req), entry, readActivityLocal());
+  if (nextLocal) fs.writeFileSync(activityFile, JSON.stringify(nextLocal, null, 2));
+  return res.status(201).json({ success: true });
 });
 
 // ── PR-2: nonce endpoint ─────────────────────────────────────────────────────
