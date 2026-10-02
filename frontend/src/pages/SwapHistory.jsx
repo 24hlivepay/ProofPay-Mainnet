@@ -23,7 +23,7 @@ function formatTime(timestamp) {
 
 function TokenBadge({ symbol }) {
   return (
-    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg font-bold text-blue-600" aria-hidden="true">
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold text-blue-600 shadow-sm" aria-hidden="true">
       {GLYPHS[symbol] || String(symbol).slice(0, 1)}
     </span>
   );
@@ -58,16 +58,16 @@ function HistoryCard({ item, chainName }) {
   const hasLinks = item.links?.length > 0;
 
   return (
-    <li className="rounded-2xl border border-slate-200 bg-white p-4">
+    <li className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{isSwap ? "Swap" : "Bridge"}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-sm">{isSwap ? "Swap" : "Bridge"}</span>
         <p className="text-xs text-slate-400">{formatDate(item.createdAt)} · {formatTime(item.createdAt)}</p>
       </div>
 
       <div className="mt-4">
         <Side label="From" {...from} />
         <div className="my-1 ml-[18px] flex h-6 items-center" aria-hidden="true">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-400">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-blue-200 bg-white text-slate-400">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14M6 13l6 6 6-6" />
             </svg>
@@ -82,7 +82,7 @@ function HistoryCard({ item, chainName }) {
               onClick={() => setOpen((value) => !value)}
               aria-expanded={open}
               aria-label={open ? "Hide details" : "Show details"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm hover:bg-slate-100"
             >
               <svg viewBox="0 0 24 24" className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M6 9l6 6 6-6" />
@@ -93,7 +93,7 @@ function HistoryCard({ item, chainName }) {
       </div>
 
       {open && hasLinks && (
-        <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+        <ul className="mt-4 space-y-2 border-t border-blue-200 pt-3">
           {item.links.map((link) => (
             <li key={link.href} className="flex items-center justify-between gap-3 text-sm">
               <span className="text-slate-600"><span className="text-green-600">✓</span> {link.label}</span>
