@@ -1240,7 +1240,7 @@ async function getSwapAllowance({ network, tokenAddress, owner, spender }) {
   const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
   const provider = new ethers.JsonRpcProvider(SWAP_RPC_URL_BY_NETWORK[network], chainId, { staticNetwork: ethers.Network.from(chainId) });
   const token = new ethers.Contract(tokenAddress, ERC20_ALLOWANCE_ABI, provider);
-  return token.allowance(owner, spender);
+  return withNetworkRetry(() => withTimeout(token.allowance(owner, spender), 4000));
 }
 
 // cirBTC deliberately isn't in ESCROW_ASSETS_BY_NETWORK (no ProofPay escrow
@@ -1258,13 +1258,41 @@ function getSwapTokenInfo(symbol, network) {
   return asset ? { tokenAddress: asset.tokenAddress, decimals: asset.decimals } : null;
 }
 
+// Calls out of a serverless function sometimes hang or drop while the
+// connection is being made ("socket disconnected before secure TLS connection
+// was established", seconds of waiting). A call that fails that way, or with a
+// 429/5xx, is cut short by a timeout and tried again; an answer with a 4xx
+// (for example "no quote available") is final and is not repeated.
+async function withNetworkRetry(call, attempts = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await call();
+    } catch (error) {
+      lastError = error;
+      const status = error.response?.status;
+      if (error.response && status < 500 && status !== 429) throw error;
+    }
+  }
+  throw lastError;
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function fetchLifiQuote({ network, tokenIn, tokenOut, amountIn, fromAddress }) {
   const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
   const inInfo = getSwapTokenInfo(tokenIn, network);
   const outInfo = getSwapTokenInfo(tokenOut, network);
   if (!chainId || !inInfo || !outInfo) return null;
 
-  const response = await axios.get(`${LIFI_API_URL}/quote`, {
+  const response = await withNetworkRetry(() => axios.get(`${LIFI_API_URL}/quote`, {
+    timeout: 8000,
     params: {
       fromChain: chainId,
       toChain: chainId,
@@ -1273,7 +1301,7 @@ async function fetchLifiQuote({ network, tokenIn, tokenOut, amountIn, fromAddres
       fromAmount: ethers.parseUnits(String(amountIn), inInfo.decimals).toString(),
       fromAddress,
     },
-  });
+  }));
   return { quote: response.data, inInfo, outInfo };
 }
 
@@ -1406,6 +1434,12 @@ async function waitForCircleChallenge({ network, userToken, challengeId, onEvent
   throw new Error("The transaction is still processing. Check your wallet activity before retrying.");
 }
 
+// The router that swaps are approved to on each network (the LI.FI Diamond;
+// 0x13b2 = 5042 is Arc mainnet). It is only a head start for reading the
+// allowance early; the quote's own approvalAddress decides what is used.
+const KNOWN_SWAP_SPENDER_BY_NETWORK = { mainnet: "0xA4072583658Fae592A3506A42431cb6316a8d40b" };
+const lastSwapSpenderByNetwork = {};
+
 const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, events, createdAt }
 const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
 
@@ -1492,21 +1526,39 @@ app.post("/api/swap/circle", async (req, res) => {
   };
 
   try {
+    // The allowance read takes several seconds on the server, about as long as
+    // the quote, so it starts at the same time against the spender the last
+    // quote named (the LI.FI router). When the quote names the same spender the
+    // result is used as it is; if not, the read is simply made again.
+    const guessedSpender = lastSwapSpenderByNetwork[network] || KNOWN_SWAP_SPENDER_BY_NETWORK[network];
+    const guessedInInfo = getSwapTokenInfo(params.tokenIn, network);
+    const speculativeAllowance =
+      guessedSpender && guessedInInfo
+        ? getSwapAllowance({ network, tokenAddress: guessedInInfo.tokenAddress, owner: params.walletAddress, spender: guessedSpender }).catch(() => null)
+        : null;
+
     const fetched = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
     if (!fetched) throw new Error("Swap is not configured on this network yet.");
     const { quote, inInfo } = fetched;
     mark("quote-ready");
+    lastSwapSpenderByNetwork[network] = quote.estimate.approvalAddress;
 
     let approveTxHash = null;
-    const currentAllowance = await getSwapAllowance({
-      network,
-      tokenAddress: inInfo.tokenAddress,
-      owner: params.walletAddress,
-      spender: quote.estimate.approvalAddress,
-    }).catch(() => {
+    const failedRead = () => {
       mark("allowance: read failed, approving as before");
       return 0n;
-    }); // if the read fails, fall through to approving as before
+    }; // if the read fails, fall through to approving as before
+    let currentAllowance;
+    if (speculativeAllowance && guessedSpender.toLowerCase() === quote.estimate.approvalAddress.toLowerCase()) {
+      currentAllowance = (await speculativeAllowance) ?? failedRead();
+    } else {
+      currentAllowance = await getSwapAllowance({
+        network,
+        tokenAddress: inInfo.tokenAddress,
+        owner: params.walletAddress,
+        spender: quote.estimate.approvalAddress,
+      }).catch(failedRead);
+    }
     mark("allowance-checked");
 
     if (currentAllowance < BigInt(quote.action.fromAmount)) {
