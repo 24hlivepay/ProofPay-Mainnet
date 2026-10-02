@@ -368,6 +368,11 @@ export default function Swap() {
         [...pinEvents, ...(serverEvents || []).map((e) => ({ name: `server ${e.name}`, ms: e.ms }))].sort((a, b) => a.ms - b.ms)
       );
     let failedPolls = 0;
+    // A job that sits in "pending" (before any PIN was asked for) without
+    // adding a step for 90 s is stuck on the server. Nothing was sent at that
+    // point, so it is safe to say so and let the user start again.
+    let seenEvents = -1;
+    let lastProgressAt = Date.now();
     for (let attempt = 0; attempt < 180; attempt += 1) {
       let job;
       try {
@@ -382,6 +387,17 @@ export default function Swap() {
         if (failedPolls >= 4) throw new SwapStatusUnknown();
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
         continue;
+      }
+
+      if ((job.events || []).length !== seenEvents) {
+        seenEvents = (job.events || []).length;
+        lastProgressAt = Date.now();
+      }
+      if (job.status === "pending" && Date.now() - lastProgressAt > 90000) {
+        const lastStep = (job.events || []).slice(-1)[0]?.name || "starting";
+        console.info("[ProofPay] swap job stalled", { jobId, events: job.events });
+        resumeJobRef.current = null; // no PIN was asked for: a fresh swap is safe
+        throw new Error(`Our server stopped responding while preparing this swap (last step: ${lastStep}). Nothing was sent from your wallet. Please try again.`);
       }
 
       if (job.status === "awaiting-approval" && job.challengeId && !handledChallengeIds.has(job.challengeId)) {
