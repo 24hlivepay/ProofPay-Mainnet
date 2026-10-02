@@ -9,7 +9,7 @@ import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import SuccessPanel from "../components/SuccessPanel";
 import ProgressDialog from "../components/ProgressDialog";
-import { recordActivity } from "../services/activity";
+import { plainAmount, recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -388,13 +388,15 @@ export default function Swap() {
 
   // Adds the finished swap to the user's History. The paid amount and the
   // quoted amount received are what the page showed at confirm time.
-  function recordSwap(hash) {
+  function recordSwap(hash, startedAt) {
     recordActivity({
       kind: "swap",
       tokenIn,
       tokenOut,
-      amountIn,
-      amountOut: estimate?.estimatedOutput?.amount || null,
+      amountIn: plainAmount(amountIn),
+      amountOut: plainAmount(estimate?.estimatedOutput?.amount),
+      fees: (estimate?.fees || []).map((fee) => ({ label: FEE_LABELS[fee.type] || "Fee", amount: plainAmount(fee.amount), token: fee.token })),
+      durationSec: Math.round((Date.now() - startedAt) / 1000),
       links: hash ? [{ label: "Swap transaction", href: `${network.explorerBase}/tx/${hash}` }] : [],
     });
   }
@@ -402,6 +404,7 @@ export default function Swap() {
   async function confirmSwap() {
     if (runningRef.current) return;
     runningRef.current = true;
+    const startedAt = Date.now();
     try {
       setStatus("swapping");
       setMessage("");
@@ -413,7 +416,7 @@ export default function Swap() {
         setDialogOpen(true);
         const result = await confirmCircleSwap();
         setTxHash(result?.transactionHash || "");
-        recordSwap(result?.transactionHash);
+        recordSwap(result?.transactionHash, startedAt);
         setSwapStage("done");
         setStatus("done");
         setAmountIn("");
@@ -425,7 +428,7 @@ export default function Swap() {
       const adapter = await buildAdapter();
       const result = await withRouteRetry(() => kit.swap(buildSwapParams(adapter)));
       setTxHash(result?.transactionHash || result?.hash || "");
-      recordSwap(result?.transactionHash || result?.hash);
+      recordSwap(result?.transactionHash || result?.hash, startedAt);
       setReceipt({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
       setStatus("done");
       setAmountIn("");
