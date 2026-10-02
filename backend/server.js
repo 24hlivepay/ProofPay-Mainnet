@@ -1258,33 +1258,6 @@ function getSwapTokenInfo(symbol, network) {
   return asset ? { tokenAddress: asset.tokenAddress, decimals: asset.decimals } : null;
 }
 
-// Calls out of a serverless function sometimes hang or drop while the
-// connection is being made ("socket disconnected before secure TLS connection
-// was established", seconds of waiting). A call that fails that way, or with a
-// 429/5xx, is cut short by a timeout and tried again; an answer with a 4xx
-// (for example "no quote available") is final and is not repeated.
-async function withNetworkRetry(call, attempts = 3) {
-  let lastError;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await call();
-    } catch (error) {
-      lastError = error;
-      const status = error.response?.status;
-      if (error.response && status < 500 && status !== 429) throw error;
-    }
-  }
-  throw lastError;
-}
-
-function withTimeout(promise, ms) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
 async function fetchLifiQuote({ network, tokenIn, tokenOut, amountIn, fromAddress }) {
   const chainId = SWAP_CHAIN_ID_BY_NETWORK[network];
   const inInfo = getSwapTokenInfo(tokenIn, network);
@@ -1370,22 +1343,52 @@ app.post("/api/swap/circle/estimate", async (req, res) => {
   }
 });
 
+// Calls out of a serverless function sometimes hang or drop while the
+// connection is being made ("socket disconnected before secure TLS connection
+// was established", seconds of waiting). A call that fails that way, or with a
+// 429/5xx, is cut short by a timeout and tried again; an answer with a 4xx
+// (for example "no quote available") is final and is not repeated.
+async function withNetworkRetry(call, attempts = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await call();
+    } catch (error) {
+      lastError = error;
+      const status = error.response?.status;
+      if (error.response && status < 500 && status !== 429) throw error;
+    }
+  }
+  throw lastError;
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const CIRCLE_CHALLENGE_SUCCESS = new Set(["COMPLETE", "CONFIRMED"]);
 const CIRCLE_CHALLENGE_FAILURE = new Set(["CANCELLED", "DENIED", "FAILED", "EXPIRED"]);
 
 async function createCircleContractChallenge({ network, userToken, walletId, contractAddress, abiFunctionSignature, abiParameters, callData, amount }) {
-  const response = await axios.post(
+  // One idempotency key for every try of this call, so a retry after a lost
+  // reply cannot make a second challenge.
+  const idempotencyKey = crypto.randomUUID();
+  const response = await withNetworkRetry(() => axios.post(
     `${CIRCLE_API_URL}/v1/w3s/user/transactions/contractExecution`,
     {
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey,
       walletId,
       contractAddress,
       ...(callData ? { callData } : { abiFunctionSignature, abiParameters }),
       ...(amount ? { amount } : {}),
       feeLevel: "MEDIUM",
     },
-    { headers: { ...getCircleHeaders(network), "X-User-Token": userToken } }
-  );
+    { headers: { ...getCircleHeaders(network), "X-User-Token": userToken }, timeout: 15000 }
+  ));
   return response.data.data.challengeId;
 }
 
@@ -1396,9 +1399,10 @@ async function createCircleContractChallenge({ network, userToken, walletId, con
 async function waitForCircleChallenge({ network, userToken, challengeId, onEvent = () => {} }) {
   let transactionId = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/user/challenges/${challengeId}`, {
+    const response = await withNetworkRetry(() => axios.get(`${CIRCLE_API_URL}/v1/w3s/user/challenges/${challengeId}`, {
       headers: { ...getCircleHeaders(network), "X-User-Token": userToken },
-    });
+      timeout: 10000,
+    }));
     const challenge = response.data.data?.challenge;
     transactionId = challenge?.correlationIds?.[0] || transactionId;
     if (transactionId) {
@@ -1414,9 +1418,10 @@ async function waitForCircleChallenge({ network, userToken, challengeId, onEvent
 
   let lastState = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/transactions/${transactionId}`, {
+    const response = await withNetworkRetry(() => axios.get(`${CIRCLE_API_URL}/v1/w3s/transactions/${transactionId}`, {
       headers: { ...getCircleHeaders(network), "X-User-Token": userToken },
-    });
+      timeout: 10000,
+    }));
     const transaction = response.data.data?.transaction;
     if (transaction?.state && transaction.state !== lastState) {
       lastState = transaction.state;
