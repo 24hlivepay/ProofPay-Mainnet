@@ -11,6 +11,15 @@ export async function recordActivity(entry) {
   }
 }
 
+// A plain decimal string the server accepts (no exponent, at most 8 places,
+// no trailing zeros): 6.8e-7 becomes "0.00000068".
+export function plainAmount(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return null;
+  return number.toFixed(8).replace(/\.?0+$/, "") || "0";
+}
+
 export async function fetchActivity() {
   const response = await api.get("/activity");
   return response.data.activity || [];

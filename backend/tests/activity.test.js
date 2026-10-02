@@ -54,6 +54,33 @@ describe("sanitizeActivity", () => {
   });
 });
 
+describe("fees and duration", () => {
+  it("keeps valid fee lines and a whole-second duration", () => {
+    const { entry } = sanitizeActivity({
+      ...swap,
+      fees: [{ label: "Swap fee", amount: "0.002", token: "EURC" }, { label: "Network fee", amount: "0.00000068", token: "ETH" }],
+      durationSec: 134,
+    });
+    assert.deepEqual(entry.fees, [
+      { label: "Swap fee", amount: "0.002", token: "EURC" },
+      { label: "Network fee", amount: "0.00000068", token: "ETH" },
+    ]);
+    assert.equal(entry.durationSec, 134);
+  });
+
+  it("drops malformed fee lines and out-of-range durations instead of failing the record", () => {
+    const { entry } = sanitizeActivity({
+      ...bridge,
+      fees: [{ label: "<b>x</b>", amount: "1", token: "USDC" }, { label: "Fee", amount: "6.8e-7", token: "ETH" }, "junk", { label: "Ok", amount: "1", token: "USDC" }],
+      durationSec: -5,
+    });
+    assert.deepEqual(entry.fees, [{ label: "Ok", amount: "1", token: "USDC" }]);
+    assert.equal(entry.durationSec, null);
+    assert.deepEqual(sanitizeActivity({ ...swap, fees: "nope" }).entry.fees, []);
+    assert.equal(sanitizeActivity({ ...swap, durationSec: 1.5 }).entry.durationSec, null);
+  });
+});
+
 describe("activity storage (file mode)", () => {
   it("records, lists newest first, and ignores a repeated clientId", async () => {
     let local = [];

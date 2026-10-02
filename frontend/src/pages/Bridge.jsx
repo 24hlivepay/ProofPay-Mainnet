@@ -8,7 +8,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import ProgressDialog from "../components/ProgressDialog";
-import { recordActivity } from "../services/activity";
+import { plainAmount, recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -431,6 +431,7 @@ export default function Bridge() {
   async function runBridge(action, { startProgress = 0 } = {}) {
     if (runningRef.current) return;
     runningRef.current = true;
+    const startedAt = Date.now();
     let provider;
     // The SDK emits an event when a step has finished, so the message moves to
     // the step that is now waiting.
@@ -497,8 +498,17 @@ export default function Bridge() {
         token,
         sourceChain: sourceInfo.name,
         destinationChain: destinationInfo.name,
-        sent: String(quoted ? quoted.walletTotal : Number(result?.amount || amount)),
-        received: quoted ? String(quoted.receive) : null,
+        sent: plainAmount(quoted ? quoted.walletTotal : Number(result?.amount || amount)),
+        received: quoted ? plainAmount(quoted.receive) : null,
+        fees: [
+          ...(quoted?.fees || []).map((fee) => ({
+            label: fee.type === "provider" && quoted.fees.length > 1 ? "Transfer fee" : "Bridge fee",
+            amount: plainAmount(fee.amount),
+            token: fee.token,
+          })),
+          ...(sourceGas > 0 ? [{ label: "Network fee", amount: plainAmount(sourceGas), token: sourceGasToken }] : []),
+        ],
+        durationSec: Math.round((Date.now() - startedAt) / 1000),
         links: (result?.steps || [])
           .filter((step) => step.explorerUrl)
           .map((step) => ({ label: STEP_LABELS[progressIndexForStep(step.name)] || step.name, href: step.explorerUrl })),

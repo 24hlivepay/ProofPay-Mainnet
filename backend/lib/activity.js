@@ -34,6 +34,25 @@ function cleanAmount(value) {
   return AMOUNT.test(text) ? text : null;
 }
 
+// What the user paid in fees, as the quote showed them: [{ label, amount, token }].
+function cleanFees(value) {
+  if (!Array.isArray(value)) return [];
+  const fees = [];
+  for (const item of value.slice(0, 6)) {
+    const label = cleanLabel(item?.label);
+    const amount = cleanAmount(item?.amount);
+    const token = cleanLabel(item?.token);
+    if (label && amount && token) fees.push({ label, amount, token });
+  }
+  return fees;
+}
+
+// How long the user was in the flow, in whole seconds.
+function cleanDuration(value) {
+  const seconds = Number(value);
+  return Number.isInteger(seconds) && seconds >= 0 && seconds <= 86400 ? seconds : null;
+}
+
 function cleanLinks(value) {
   if (!Array.isArray(value)) return [];
   const links = [];
@@ -53,8 +72,8 @@ function cleanLinks(value) {
 
 /**
  * Validate a reported swap or bridge. Returns { entry } or { error }.
- * swap:   { kind, clientId, tokenIn, tokenOut, amountIn, amountOut?, links? }
- * bridge: { kind, clientId, token, sourceChain, destinationChain, sent, received?, links? }
+ * swap:   { kind, clientId, tokenIn, tokenOut, amountIn, amountOut?, fees?, durationSec?, links? }
+ * bridge: { kind, clientId, token, sourceChain, destinationChain, sent, received?, fees?, durationSec?, links? }
  */
 export function sanitizeActivity(input) {
   const body = input && typeof input === "object" ? input : {};
@@ -75,6 +94,8 @@ export function sanitizeActivity(input) {
         tokenOut,
         amountIn,
         amountOut: cleanAmount(body.amountOut),
+        fees: cleanFees(body.fees),
+        durationSec: cleanDuration(body.durationSec),
         links: cleanLinks(body.links),
       },
     };
@@ -96,6 +117,8 @@ export function sanitizeActivity(input) {
       destinationChain,
       sent,
       received: cleanAmount(body.received),
+      fees: cleanFees(body.fees),
+      durationSec: cleanDuration(body.durationSec),
       links: cleanLinks(body.links),
     },
   };
