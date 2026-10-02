@@ -1406,6 +1406,48 @@ async function waitForCircleChallenge({ network, userToken, challengeId, onEvent
 const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, events, createdAt }
 const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
 
+// A serverless host can answer the next poll from a different instance than
+// the one running the job, which then found nothing ("Swap job not found").
+// So each job's state is also written to the database, and a poll that misses
+// in memory reads it from there. Writes for one job run in order.
+const CIRCLE_SWAP_JOB_RECORD = "circle_swap_job";
+
+function persistCircleSwapJob(jobId, job) {
+  if (!databasePool) return;
+  const snapshot = JSON.stringify({
+    status: job.status,
+    step: job.step,
+    challengeId: job.challengeId,
+    result: job.result,
+    error: job.error,
+    events: job.events,
+    createdAt: job.createdAt,
+  });
+  job.saving = (job.saving || Promise.resolve())
+    .then(async () => {
+      await ensureDatabase();
+      await databasePool.query(
+        `INSERT INTO proofpay_records (record_type, record_id, data, updated_at)
+         VALUES ($1, $2, $3::jsonb, NOW())
+         ON CONFLICT (record_type, record_id)
+         DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [CIRCLE_SWAP_JOB_RECORD, jobId, snapshot]
+      );
+    })
+    .catch((error) => console.error("[ProofPay] Could not save swap job state:", error.message));
+}
+
+async function loadCircleSwapJob(jobId) {
+  if (!databasePool) return null;
+  await ensureDatabase();
+  const result = await databasePool.query(
+    "SELECT data FROM proofpay_records WHERE record_type = $1 AND record_id = $2",
+    [CIRCLE_SWAP_JOB_RECORD, jobId]
+  );
+  const data = result.rows[0]?.data;
+  return data && data.createdAt >= Date.now() - CIRCLE_SWAP_JOB_TTL_MS ? data : null;
+}
+
 function pruneCircleSwapJobs() {
   const cutoff = Date.now() - CIRCLE_SWAP_JOB_TTL_MS;
   for (const [jobId, job] of circleSwapJobs) {
@@ -1426,12 +1468,25 @@ app.post("/api/swap/circle", async (req, res) => {
   pruneCircleSwapJobs();
   const jobId = crypto.randomUUID();
   circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, events: [], createdAt: Date.now() });
-  res.status(202).json({ jobId });
 
   const job = circleSwapJobs.get(jobId);
+  // The first poll can land on another instance right after this reply, so
+  // the job's first record has to be saved before the browser is told its id.
+  persistCircleSwapJob(jobId, job);
+  await job.saving;
+  res.status(202).json({ jobId });
+  // Old finished jobs are of no use after the TTL; keep the table small.
+  if (databasePool) {
+    databasePool
+      .query("DELETE FROM proofpay_records WHERE record_type = $1 AND updated_at < NOW() - INTERVAL '1 hour'", [CIRCLE_SWAP_JOB_RECORD])
+      .catch(() => {});
+  }
   // Where the time goes in an email-wallet swap: milliseconds since the job
   // started, for each stage. Returned with the job and logged once it ends.
-  const mark = (name) => job.events.push({ name, ms: Date.now() - job.createdAt });
+  const mark = (name) => {
+    job.events.push({ name, ms: Date.now() - job.createdAt });
+    persistCircleSwapJob(jobId, job);
+  };
 
   try {
     const fetched = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
@@ -1500,18 +1555,27 @@ app.post("/api/swap/circle", async (req, res) => {
     mark("done");
     job.status = "done";
     job.result = { transactionHash: txHash, approveTransactionHash: approveTxHash };
+    persistCircleSwapJob(jobId, job);
   } catch (error) {
     job.status = "error";
     mark("error");
     job.error = error.response?.data?.message || error.message || "The swap did not go through.";
+    persistCircleSwapJob(jobId, job);
     if (!error.response) {
       console.error("[ProofPay] Circle swap job failed:", error.message);
     }
   }
 });
 
-app.get("/api/swap/circle/:jobId", (req, res) => {
-  const job = circleSwapJobs.get(req.params.jobId);
+app.get("/api/swap/circle/:jobId", async (req, res) => {
+  let job = circleSwapJobs.get(req.params.jobId);
+  if (!job) {
+    try {
+      job = await loadCircleSwapJob(req.params.jobId);
+    } catch (error) {
+      console.error("[ProofPay] Could not read swap job state:", error.message);
+    }
+  }
   if (!job) {
     return res.status(404).json({ message: "Swap job not found or expired." });
   }
