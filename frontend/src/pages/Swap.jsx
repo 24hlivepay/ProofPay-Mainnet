@@ -342,6 +342,15 @@ export default function Swap() {
     // this loop has already handed to the Web SDK by id (not a boolean) so
     // the second, distinct challengeId still gets picked up.
     const handledChallengeIds = new Set();
+    // Browser-side half of the timing: when each PIN window opened and closed.
+    // Printed with the server's stage times so a slow swap can be traced.
+    const pinEvents = [];
+    const startedAt = Date.now();
+    const printTimings = (serverEvents) =>
+      console.info(
+        "[ProofPay] email-wallet swap timings (ms since start)",
+        [...pinEvents, ...(serverEvents || []).map((e) => ({ name: `server ${e.name}`, ms: e.ms }))].sort((a, b) => a.ms - b.ms)
+      );
     for (let attempt = 0; attempt < 180; attempt += 1) {
       const poll = await api.get(`/swap/circle/${jobId}`, {
         headers: { "X-User-Token": auth.userToken },
@@ -357,6 +366,7 @@ export default function Swap() {
             ? `Approve access to your ${tokenIn} with your PIN...`
             : "Approve this swap with your PIN..."
         );
+        pinEvents.push({ name: `browser ${job.step}: PIN window opened`, ms: Date.now() - startedAt });
         await executeCircleChallenge({
           challengeId: job.challengeId,
           userToken: auth.userToken,
@@ -373,10 +383,15 @@ export default function Swap() {
             action: job.step === "approve" ? "Approve" : "Swap",
           },
         });
+        pinEvents.push({ name: `browser ${job.step}: PIN confirmed`, ms: Date.now() - startedAt });
         setSwapStage(job.step === "approve" ? "swap" : "confirm");
         setMessage("Finishing your swap...");
       }
 
+      if (job.status === "done" || job.status === "error") {
+        pinEvents.push({ name: `browser: saw job ${job.status}`, ms: Date.now() - startedAt });
+        printTimings(job.events);
+      }
       if (job.status === "done") return job.result;
       if (job.status === "error") throw new Error(job.error);
 

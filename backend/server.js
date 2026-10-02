@@ -1362,7 +1362,7 @@ async function createCircleContractChallenge({ network, userToken, walletId, con
 // the Web SDK (see executeCircleChallenge() in circleConfig.js, called from
 // the client once it sees this challengeId through the job poll below),
 // then returns the resulting on-chain transaction hash.
-async function waitForCircleChallenge({ network, userToken, challengeId }) {
+async function waitForCircleChallenge({ network, userToken, challengeId, onEvent = () => {} }) {
   let transactionId = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/user/challenges/${challengeId}`, {
@@ -1370,7 +1370,10 @@ async function waitForCircleChallenge({ network, userToken, challengeId }) {
     });
     const challenge = response.data.data?.challenge;
     transactionId = challenge?.correlationIds?.[0] || transactionId;
-    if (transactionId) break;
+    if (transactionId) {
+      onEvent("pin-accepted"); // Circle created the transaction, so the PIN went through
+      break;
+    }
     if (CIRCLE_CHALLENGE_FAILURE.has(challenge?.status)) {
       throw new Error(challenge.errorMessage || `Approval ended with status: ${challenge.status}.`);
     }
@@ -1378,12 +1381,18 @@ async function waitForCircleChallenge({ network, userToken, challengeId }) {
   }
   if (!transactionId) throw new Error("Approval is taking longer than expected. Check your wallet activity.");
 
+  let lastState = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const response = await axios.get(`${CIRCLE_API_URL}/v1/w3s/transactions/${transactionId}`, {
       headers: { ...getCircleHeaders(network), "X-User-Token": userToken },
     });
     const transaction = response.data.data?.transaction;
+    if (transaction?.state && transaction.state !== lastState) {
+      lastState = transaction.state;
+      onEvent(`state ${transaction.state}`);
+    }
     if (CIRCLE_CHALLENGE_SUCCESS.has(transaction?.state) && transaction?.txHash) {
+      onEvent("tx-hash-ready");
       return transaction.txHash;
     }
     if (CIRCLE_CHALLENGE_FAILURE.has(transaction?.state)) {
@@ -1394,7 +1403,7 @@ async function waitForCircleChallenge({ network, userToken, challengeId }) {
   throw new Error("The transaction is still processing. Check your wallet activity before retrying.");
 }
 
-const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, createdAt }
+const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, events, createdAt }
 const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
 
 function pruneCircleSwapJobs() {
@@ -1416,15 +1425,19 @@ app.post("/api/swap/circle", async (req, res) => {
 
   pruneCircleSwapJobs();
   const jobId = crypto.randomUUID();
-  circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, createdAt: Date.now() });
+  circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, events: [], createdAt: Date.now() });
   res.status(202).json({ jobId });
 
   const job = circleSwapJobs.get(jobId);
+  // Where the time goes in an email-wallet swap: milliseconds since the job
+  // started, for each stage. Returned with the job and logged once it ends.
+  const mark = (name) => job.events.push({ name, ms: Date.now() - job.createdAt });
 
   try {
     const fetched = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
     if (!fetched) throw new Error("Swap is not configured on this network yet.");
     const { quote, inInfo } = fetched;
+    mark("quote-ready");
 
     let approveTxHash = null;
     const currentAllowance = await getSwapAllowance({
@@ -1446,7 +1459,15 @@ app.post("/api/swap/circle", async (req, res) => {
       });
       job.challengeId = approveChallengeId;
       job.status = "awaiting-approval";
-      approveTxHash = await waitForCircleChallenge({ network, userToken, challengeId: approveChallengeId });
+      mark("approve: challenge-created");
+      approveTxHash = await waitForCircleChallenge({
+        network,
+        userToken,
+        challengeId: approveChallengeId,
+        onEvent: (name) => mark(`approve: ${name}`),
+      });
+    } else {
+      mark("approve: not needed (allowance already set)");
     }
 
     job.step = "swap";
@@ -1464,12 +1485,20 @@ app.post("/api/swap/circle", async (req, res) => {
     });
     job.challengeId = swapChallengeId;
     job.status = "awaiting-approval";
-    const txHash = await waitForCircleChallenge({ network, userToken, challengeId: swapChallengeId });
+    mark("swap: challenge-created");
+    const txHash = await waitForCircleChallenge({
+      network,
+      userToken,
+      challengeId: swapChallengeId,
+      onEvent: (name) => mark(`swap: ${name}`),
+    });
 
+    mark("done");
     job.status = "done";
     job.result = { transactionHash: txHash, approveTransactionHash: approveTxHash };
   } catch (error) {
     job.status = "error";
+    mark("error");
     job.error = error.response?.data?.message || error.message || "The swap did not go through.";
     if (!error.response) {
       console.error("[ProofPay] Circle swap job failed:", error.message);
@@ -1488,6 +1517,7 @@ app.get("/api/swap/circle/:jobId", (req, res) => {
     challengeId: job.challengeId,
     result: job.result,
     error: job.error,
+    events: job.events,
   });
 });
 
