@@ -45,6 +45,7 @@ export default function ProgressDialog({
   closable,
   onClose,
   onRetry,
+  retryLabel = "Retry",
 }) {
   useEffect(() => {
     if (!open || !closable) return undefined;
@@ -118,7 +119,7 @@ export default function ProgressDialog({
           <div className="mt-5">
             <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{message}</p>
             <div className="mt-3 space-y-2">
-              {onRetry && <PrimaryButton onClick={onRetry}>Retry</PrimaryButton>}
+              {onRetry && <PrimaryButton onClick={onRetry}>{retryLabel}</PrimaryButton>}
               <button type="button" onClick={onClose} className="w-full rounded-xl py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">
                 Close
               </button>
