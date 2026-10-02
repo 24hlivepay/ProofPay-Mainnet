@@ -39,6 +39,27 @@ function ReceiptRow({ label, detail, copyValue, copyLabel, href, hrefLabel }) {
   );
 }
 
+// A hash (or ID) shown inside the record's own card: label and actions on one
+// line, the full value under it.
+function InlineHashRow({ label, value, href, copyLabel, hrefLabel }) {
+  return (
+    <div className="mt-3 border-t border-blue-200 pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">{label}</p>
+        <div className="flex items-center">
+          <CopyButton value={value} label={copyLabel} />
+          {href && (
+            <a href={href} target="_blank" rel="noreferrer" aria-label={hrefLabel} className="rounded-md p-1.5 text-slate-500 hover:bg-white">
+              {EXTERNAL_ICON}
+            </a>
+          )}
+        </div>
+      </div>
+      <p className="break-all font-mono text-xs text-slate-700">{value}</p>
+    </div>
+  );
+}
+
 export default function SwapHistoryDetail() {
   const { clientId } = useParams();
   const { walletSlot, walletAddress } = useWalletBadge();
@@ -116,9 +137,32 @@ export default function SwapHistoryDetail() {
             ) : (
               <>
                 <ul>
-                  <ActivityRecord item={item} chainName={network.chainName} defaultOpen />
+                  <ActivityRecord
+                    item={item}
+                    chainName={network.chainName}
+                    defaultOpen
+                    footer={item.kind === "swap" ? (
+                      <>
+                        {transactions.map((tx) => (
+                          <InlineHashRow
+                            key={`${tx.label}-${tx.hash}`}
+                            label={tx.label === "Swap" ? "Transaction hash" : `${tx.label} transaction hash`}
+                            value={tx.hash}
+                            href={tx.href}
+                            copyLabel="Copy transaction hash"
+                            hrefLabel={`View ${tx.label} on explorer`}
+                          />
+                        ))}
+                        {transactions.length === 0 && (
+                          <p className="mt-3 border-t border-blue-200 pt-3 text-xs text-slate-500">No transaction hash was saved for this record.</p>
+                        )}
+                        <InlineHashRow label="ProofPay reference ID" value={item.clientId} copyLabel="Copy reference ID" />
+                      </>
+                    ) : null}
+                  />
                 </ul>
 
+                {item.kind === "bridge" && (<>
                 <section className="mt-4 rounded-2xl border border-slate-200 p-4">
                   <h2 className="text-base font-bold text-slate-900">Transactions</h2>
                   <p className="mt-1 text-xs text-slate-500">
@@ -163,6 +207,7 @@ export default function SwapHistoryDetail() {
                   <p className="mt-2 break-all font-mono text-xs text-slate-600">{item.clientId}</p>
                   <p className="mt-2 text-xs text-slate-400">ProofPay's own number for this record, not a blockchain ID. Quote it if you ask for help.</p>
                 </section>
+                </>)}
               </>
             )}
           </div>
