@@ -1478,16 +1478,33 @@ app.post("/api/swap/circle", async (req, res) => {
     }
 
     job.step = "swap";
+    // The quote above is as old as the approval took (a PIN and a confirmation,
+    // 30 s or more). A route and minimum output that old can fail the swap's
+    // gas estimation (ESTIMATION_ERROR), so after an approval the quote is
+    // asked for again. Only used if it is for the same spender the allowance
+    // was just given to.
+    let swapQuote = quote;
+    if (approveTxHash) {
+      try {
+        const refreshed = await fetchLifiQuote({ network, ...params, fromAddress: params.walletAddress });
+        if (refreshed?.quote?.estimate?.approvalAddress?.toLowerCase() === quote.estimate.approvalAddress.toLowerCase()) {
+          swapQuote = refreshed.quote;
+          mark("swap: quote refreshed");
+        }
+      } catch {
+        // keep the original quote
+      }
+    }
     const nativeValue =
-      quote.transactionRequest.value && quote.transactionRequest.value !== "0x0"
-        ? ethers.formatUnits(BigInt(quote.transactionRequest.value), 18)
+      swapQuote.transactionRequest.value && swapQuote.transactionRequest.value !== "0x0"
+        ? ethers.formatUnits(BigInt(swapQuote.transactionRequest.value), 18)
         : null;
     const swapChallengeId = await createCircleContractChallenge({
       network,
       userToken,
       walletId: params.walletId,
-      contractAddress: quote.transactionRequest.to,
-      callData: quote.transactionRequest.data,
+      contractAddress: swapQuote.transactionRequest.to,
+      callData: swapQuote.transactionRequest.data,
       amount: nativeValue,
     });
     job.challengeId = swapChallengeId;
