@@ -85,9 +85,10 @@ const PROGRESS_KEYS = ["switch", "approve", "send", "attest", "deliver"];
 // What each finished step is called in the History list.
 const STEP_LABELS = ["Network switch", "Approval", "Sent from source chain", "Circle confirmation", "Delivered on destination chain"];
 
-function historyStepLabel(index, name, sourceName, destinationName) {
-  if (index === 2) return `Sent from ${sourceName}`;
-  if (index === 4) return `Delivered on ${destinationName}`;
+function historyStepLabel(index, name) {
+  // The two hashes people check a bridge by, named for what they are.
+  if (index === 2) return "Source transaction";
+  if (index === 4) return "Destination transaction";
   return STEP_LABELS[index] || name;
 }
 
@@ -515,9 +516,19 @@ export default function Bridge() {
           ...(sourceGas > 0 ? [{ label: "Network fee", amount: plainAmount(sourceGas), token: sourceGasToken }] : []),
         ],
         durationSec: Math.round((Date.now() - startedAt) / 1000),
-        links: (result?.steps || [])
-          .filter((step) => step.explorerUrl)
-          .map((step) => ({ label: historyStepLabel(progressIndexForStep(step.name), step.name, sourceInfo.name, destinationInfo.name), href: step.explorerUrl })),
+        transactions: (result?.steps || [])
+          .map((step) => {
+            const index = progressIndexForStep(step.name);
+            const hash = step.txHash || String(step.explorerUrl || "").match(/0x[a-fA-F0-9]{64}/)?.[0];
+            if (index < 0 || !hash) return null;
+            return {
+              label: historyStepLabel(index, step.name),
+              chain: index === 4 ? destinationInfo.name : sourceInfo.name,
+              hash,
+              href: step.explorerUrl,
+            };
+          })
+          .filter(Boolean),
       });
       // The dialog is the completion screen: it stays until the user presses
       // OK (also reopened if they had closed it while the bridge ran).
