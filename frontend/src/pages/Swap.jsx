@@ -80,6 +80,14 @@ async function withRouteRetry(run, attempts = 3) {
   }
 }
 
+// The page lost contact with a swap job (several polls in a row failed): the
+// swap may well have gone through, so it must not be started again blindly.
+class SwapStatusUnknown extends Error {
+  constructor() {
+    super("We lost contact with this swap, so we cannot tell if it went through. Press Check again before trying anything else.");
+  }
+}
+
 function describeSwapError(error, fallback) {
   const text = error.response?.data?.message || error.message || fallback;
   return NO_ROUTE.test(text)
@@ -120,6 +128,10 @@ export default function Swap() {
   // React re-renders the disabled button cannot start a second swap (the
   // same guard Bridge.jsx uses, added after a real double run there).
   const runningRef = useRef(false);
+  // The server job of an email-wallet swap that has not ended yet. Kept so a
+  // swap that got stuck can be picked up again instead of started over.
+  const resumeJobRef = useRef(null);
+  const [canResume, setCanResume] = useState(false); // mirrors resumeJobRef for the dialog button
 
   async function loadPrices() {
     // Testnet tokens have no real market value, so there's nothing
@@ -323,19 +335,23 @@ export default function Swap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amountIn, tokenIn, tokenOut, walletAddress, isCircleWallet]);
 
-  async function confirmCircleSwap() {
+  async function confirmCircleSwap(resumeJobId = null) {
     const session = getWalletSession();
     const auth = getCircleAuthSession();
     if (!session?.walletId || !auth?.userToken) {
       throw new Error("Your Circle wallet session has expired. Sign in with email again.");
     }
 
-    const startResponse = await api.post(
-      "/swap/circle",
-      { walletId: session.walletId, walletAddress: session.address, tokenIn, tokenOut, amountIn },
-      { headers: { "X-User-Token": auth.userToken } }
-    );
-    const jobId = startResponse.data.jobId;
+    let jobId = resumeJobId;
+    if (!jobId) {
+      const startResponse = await api.post(
+        "/swap/circle",
+        { walletId: session.walletId, walletAddress: session.address, tokenIn, tokenOut, amountIn },
+        { headers: { "X-User-Token": auth.userToken } }
+      );
+      jobId = startResponse.data.jobId;
+    }
+    resumeJobRef.current = jobId;
 
     // A Circle-wallet swap is two challenges in sequence -- approve, then
     // the swap itself -- each with its own challengeId. Track which ones
@@ -351,11 +367,22 @@ export default function Swap() {
         "[ProofPay] email-wallet swap timings (ms since start)",
         [...pinEvents, ...(serverEvents || []).map((e) => ({ name: `server ${e.name}`, ms: e.ms }))].sort((a, b) => a.ms - b.ms)
       );
+    let failedPolls = 0;
     for (let attempt = 0; attempt < 180; attempt += 1) {
-      const poll = await api.get(`/swap/circle/${jobId}`, {
-        headers: { "X-User-Token": auth.userToken },
-      });
-      const job = poll.data;
+      let job;
+      try {
+        const poll = await api.get(`/swap/circle/${jobId}`, {
+          headers: { "X-User-Token": auth.userToken },
+        });
+        job = poll.data;
+        failedPolls = 0;
+      } catch {
+        // One dropped poll is not the end of the swap; four in a row is.
+        failedPolls += 1;
+        if (failedPolls >= 4) throw new SwapStatusUnknown();
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        continue;
+      }
 
       if (job.status === "awaiting-approval" && job.challengeId && !handledChallengeIds.has(job.challengeId)) {
         handledChallengeIds.add(job.challengeId);
@@ -392,8 +419,14 @@ export default function Swap() {
         pinEvents.push({ name: `browser: saw job ${job.status}`, ms: Date.now() - startedAt });
         printTimings(job.events);
       }
-      if (job.status === "done") return job.result;
-      if (job.status === "error") throw new Error(job.error);
+      if (job.status === "done") {
+        resumeJobRef.current = null;
+        return job.result;
+      }
+      if (job.status === "error") {
+        resumeJobRef.current = null; // it ended for good: a retry is a new swap
+        throw new Error(job.error);
+      }
 
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
     }
@@ -421,20 +454,23 @@ export default function Swap() {
     });
   }
 
-  async function confirmSwap() {
+  async function confirmSwap({ resume = false } = {}) {
     if (runningRef.current) return;
     runningRef.current = true;
+    const resumeJobId = resume ? resumeJobRef.current : null;
+    if (!resumeJobId) resumeJobRef.current = null;
+    setCanResume(false);
     const startedAt = Date.now();
     try {
       setStatus("swapping");
       setMessage("");
 
       if (isCircleWallet) {
-        setDialogInfo({ tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
-        setNeedsApprove(false);
+        setDialogInfo((current) => (resumeJobId && current) || { tokenIn, tokenOut, paid: amountIn, received: estimate?.estimatedOutput?.amount || null });
+        if (!resumeJobId) setNeedsApprove(false);
         setSwapStage("prepare");
         setDialogOpen(true);
-        const result = await confirmCircleSwap();
+        const result = await confirmCircleSwap(resumeJobId);
         setTxHash(result?.transactionHash || "");
         recordSwap(result?.transactionHash, startedAt, result?.approveTransactionHash);
         setSwapStage("done");
@@ -457,12 +493,19 @@ export default function Swap() {
       setEstimate(null);
       refreshBalancesAfterSwap();
     } catch (error) {
+      setCanResume(Boolean(resumeJobRef.current));
       setStatus("error");
-      setMessage(describeSwapError(error, "The swap did not go through."));
+      setMessage(error instanceof SwapStatusUnknown ? error.message : describeSwapError(error, "The swap did not go through."));
     } finally {
       runningRef.current = false;
     }
   }
+
+  // The dialog's button after a stop. If the swap job is still open (contact
+  // lost, or the PIN window was closed) it is picked up again; if it ended in
+  // an error the swap is started fresh -- an approval already given is not
+  // asked for twice.
+  const retrySwap = () => confirmSwap({ resume: canResume });
 
   const busy = status === "swapping";
 
@@ -535,6 +578,8 @@ export default function Swap() {
           note="Enter your PIN when the Circle window opens, and keep this page open."
           closable={dialogPhase !== "running"}
           onClose={closeDialog}
+          onRetry={isCircleWallet ? retrySwap : undefined}
+          retryLabel={canResume ? "Check again" : "Try again"}
         />
       )}
       <main className="mx-auto max-w-lg px-5 py-8 sm:px-6">
