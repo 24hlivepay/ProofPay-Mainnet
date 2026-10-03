@@ -10,6 +10,7 @@ const TABS = [
   { key: "wallet", label: "Wallet", to: "/wallet" },
   { key: "swap-bridge", label: "Swap / Bridge", to: "/swap" },
   { key: "onramp", label: "Onramp Buy", to: "/onramp" },
+  { key: "docs", label: "Docs", to: "/docs" },
 ];
 
 // The dispute admin does not buy or sell, so their first tab is "Admin"

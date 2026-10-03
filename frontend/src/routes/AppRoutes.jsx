@@ -27,6 +27,7 @@ import AdminLogin from "../pages/AdminLogin";
 import AdminEscrows from "../pages/AdminEscrows";
 import AdminAuditLog from "../pages/AdminAuditLog";
 import AdminOnramp from "../pages/AdminOnramp";
+import Docs from "../pages/Docs";
 import Onramp from "../pages/Onramp";
 import Swap from "../pages/Swap";
 import Bridge from "../pages/Bridge";
@@ -123,6 +124,8 @@ export default function AppRoutes() {
       <Route path="/admin/audit-log" element={<AdminAuditLog />} />
       <Route path="/admin/onramp" element={<AdminOnramp />} />
       <Route path="/onramp" element={<Onramp />} />
+      <Route path="/docs" element={<Docs />} />
+      <Route path="/docs/:sectionId" element={<Docs />} />
       <Route path="/swap" element={<Swap />} />
       <Route path="/bridge" element={<Bridge />} />
       <Route path="/swap-history" element={<SwapHistory />} />
