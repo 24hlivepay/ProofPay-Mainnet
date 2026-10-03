@@ -4,6 +4,7 @@ import { getCurrentNetworkId, getNetworkConfig, NETWORKS, setCurrentNetworkId } 
 import { useClickOutside } from "../hooks/useClickOutside";
 import ProofPayLogo from "./ProofPayLogo";
 import DashboardTabs from "./DashboardTabs";
+import { getWalletSession } from "../services/wallet";
 
 // PR-3: non-blocking auth-expired banner.
 // Listens for the "proofpay:auth-expired" event fired by api.js on 401.
@@ -105,7 +106,7 @@ export default function Navbar({ walletSlot }) {
         <div className="flex items-center justify-between gap-4">
           <button
             type="button"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(getWalletSession()?.address ? "/dashboard" : "/")}
             className="flex shrink-0 items-center gap-3 text-left"
           >
             <ProofPayLogo className="h-9 w-9" />
