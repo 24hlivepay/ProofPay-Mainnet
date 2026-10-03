@@ -2,7 +2,7 @@
 
 Secure peer-to-peer escrow for USDC and EURC on Arc, with a wallet, swap, bridge and onramp around it.
 
-[Live app](https://proofpay.online) · [Docs](https://proofpay.online/#/docs) · [Demo video](https://youtu.be/O791txQRc5E) · [USDC escrow on Arc Mainnet](https://explorer.arc.io/address/0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B) · [EURC escrow on Arc Mainnet](https://explorer.arc.io/address/0x7894E539a16b0D1aE272BE4ebF998353C6E15C86)
+[Live app](https://proofpay.online) · [Docs](https://proofpay.online/#/docs) · [USDC escrow on Arc Mainnet](https://explorer.arc.io/address/0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B) · [EURC escrow on Arc Mainnet](https://explorer.arc.io/address/0x7894E539a16b0D1aE272BE4ebF998353C6E15C86)
 
 > ProofPay is live on Arc Mainnet and Arc Testnet. The contracts are verified on the Arc explorer but have not had an independent audit yet. Use small amounts on mainnet.
 
