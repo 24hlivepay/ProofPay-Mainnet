@@ -5,8 +5,8 @@ import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWalletWithOptions } from "../services/wallet";
-import { API_BASE_URL } from "../services/api";
-import { getNetworkConfig } from "../config/network";
+import api, { API_BASE_URL } from "../services/api";
+import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 
 // Buy USDC/EURC on Arc with a card, Apple Pay, Google Pay, or bank transfer,
 // delivered straight to the connected wallet. Circle's own hosted widget
@@ -24,6 +24,21 @@ import { getNetworkConfig } from "../config/network";
 // guessed override), so this uses the SDK's default for both networks.
 const kit = new AppKit();
 
+const PURCHASE_STATUS = {
+  submitted: "Payment submitted",
+  settled: "Completed",
+  not_completed: "Not completed",
+};
+
+// Tells the server how far this purchase got, for the admin's Onramp list.
+// A courtesy record only -- a failure here must never disturb the purchase.
+function report(clientId, status, payload) {
+  const { amount, tokenSymbol, paymentMethod, orderId, transactionHash, code } = payload || {};
+  return api
+    .post("/onramp/events", { clientId, status, amount, tokenSymbol, paymentMethod, orderId, transactionHash, code })
+    .catch(() => {});
+}
+
 export default function Onramp() {
   const { walletSlot, walletAddress } = useWalletBadge();
   const navigate = useNavigate();
@@ -32,6 +47,24 @@ export default function Onramp() {
   const widgetRef = useRef(null);
   const [status, setStatus] = useState("idle"); // idle | connecting | loading | ready | submitted | settled | error
   const [message, setMessage] = useState("");
+  const [purchases, setPurchases] = useState([]);
+  const [reported, setReported] = useState(0);
+
+  // The wallet's own earlier purchases on this network, as its browser
+  // reported them. Re-read after each report has been saved.
+  useEffect(() => {
+    if (!walletAddress || !localStorage.getItem("proofpay-jwt")) return;
+    let active = true;
+    api
+      .get("/onramp/events")
+      .then((response) => {
+        if (active) setPurchases((response.data.purchases || []).filter((item) => item.status !== "opened"));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [walletAddress, reported]);
 
   useEffect(() => {
     return () => {
@@ -55,6 +88,7 @@ export default function Onramp() {
       if (!token) throw new Error("Please connect your wallet and try again.");
 
       setStatus("loading");
+      const clientId = crypto.randomUUID();
       const session = await kit.onramp.fetchSession({
         url: `${API_BASE_URL}/onramp/sessions`,
         headers: { Authorization: `Bearer ${token}` },
@@ -71,7 +105,10 @@ export default function Onramp() {
       widgetRef.current = kit.onramp.mountIframe({
         session,
         container: containerRef.current,
-        onInitializationSuccess: () => setStatus("ready"),
+        onInitializationSuccess: () => {
+          setStatus("ready");
+          report(clientId, "opened");
+        },
         onInitializationError: (envelope) => {
           setStatus("error");
           setMessage(
@@ -80,12 +117,17 @@ export default function Onramp() {
               : "The onramp widget could not start. Try again in a moment."
           );
         },
-        onDepositSubmitted: () => setStatus("submitted"),
-        onDepositSettled: () => {
+        onDepositSubmitted: (envelope) => {
+          setStatus("submitted");
+          report(clientId, "submitted", envelope?.payload).then(() => setReported((count) => count + 1));
+        },
+        onDepositSettled: (envelope) => {
+          report(clientId, "settled", envelope?.payload).then(() => setReported((count) => count + 1));
           setStatus("settled");
           setMessage(`Your ${network.chainName} balance updates in a few minutes.`);
         },
-        onDepositNotCompleted: () => {
+        onDepositNotCompleted: (envelope) => {
+          report(clientId, "not_completed", { code: envelope?.code }).then(() => setReported((count) => count + 1));
           setStatus("ready");
           setMessage("That attempt didn't go through. You can try again below.");
         },
@@ -163,6 +205,40 @@ export default function Onramp() {
                 className={status === "loading" || status === "ready" || status === "submitted" ? "mt-6 w-full" : "hidden"}
                 style={{ height: "720px" }}
               />
+
+              {purchases.length > 0 && (
+                <div className="mt-8 border-t border-slate-200 pt-6">
+                  <h2 className="text-lg font-bold text-slate-900">Your purchases</h2>
+                  <div className="mt-3 space-y-2">
+                    {purchases.map((purchase) => (
+                      <div key={purchase.clientId} className="rounded-xl border border-slate-200 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-900">
+                            {purchase.amount ? `${purchase.amount} ` : ""}
+                            {purchase.tokenSymbol || "Purchase"}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(purchase.updatedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-4 text-slate-600">
+                          <span>{PURCHASE_STATUS[purchase.status] || purchase.status}</span>
+                          {purchase.transactionHash && (
+                            <a
+                              href={getExplorerTxUrl(purchase.transactionHash)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                              View transaction
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

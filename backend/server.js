@@ -49,6 +49,7 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeActivity, recordActivity, listActivity } from "./lib/activity.js";
+import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp, listOnrampForWallet } from "./lib/onramp.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
@@ -249,6 +250,7 @@ const adminStateFile = path.join(dataDirectory, "admin-2fa-state.json");
 const adminAuditLogFile = path.join(dataDirectory, "admin-audit-log.json");
 const profilesFile = path.join(dataDirectory, "profiles.json");
 const activityFile = path.join(dataDirectory, "swap-bridge-activity.json");
+const onrampFile = path.join(dataDirectory, "onramp-purchases.json");
 const evidenceDirectory = path.join(dataDirectory, "evidence");
 const MAX_EVIDENCE_FILES = 5;
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
@@ -3366,6 +3368,38 @@ app.post("/api/onramp/sessions", requireAuth(), async (req, res) => {
     console.error("[ProofPay] onramp session mint failed:", error?.message);
     return res.sendStatus(500);
   }
+});
+
+// What the widget told the browser about a purchase (opened, submitted,
+// settled, not completed). The wallet comes from the JWT, never the body.
+function readOnrampLocal() {
+  try {
+    if (!fs.existsSync(onrampFile)) return [];
+    return JSON.parse(fs.readFileSync(onrampFile, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+app.get("/api/onramp/events", requireAuth(), async (req, res) => {
+  await ensureDatabase();
+  const purchases = await listOnrampForWallet(databasePool, req.auth.address, getRequestNetwork(req), readOnrampLocal());
+  return res.json({ success: true, purchases });
+});
+
+app.post("/api/onramp/events", requireAuth(), async (req, res) => {
+  const { entry, error } = sanitizeOnrampEvent(req.body);
+  if (error) return res.status(400).json({ success: false, message: error });
+  await ensureDatabase();
+  const nextLocal = await recordOnrampEvent(databasePool, req.auth.address, getRequestNetwork(req), entry, readOnrampLocal());
+  if (nextLocal) fs.writeFileSync(onrampFile, JSON.stringify(nextLocal, null, 2));
+  return res.status(201).json({ success: true });
+});
+
+app.get("/api/admin/onramp", requireAuth("admin"), requireFullAdmin, async (req, res) => {
+  await ensureDatabase();
+  const purchases = await listOnramp(databasePool, getRequestNetwork(req), readOnrampLocal());
+  return res.json({ success: true, purchases });
 });
 
 /*
