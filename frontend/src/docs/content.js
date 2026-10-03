@@ -343,7 +343,7 @@ export const DOC_SECTIONS = [
           ["Escrow tokens", "USDC, EURC", "USDC, EURC"],
         ],
       } },
-      { p: "Deals, history and balances are separate on each network. A deal created on testnet does not exist on mainnet. When you switch network you sign in again, and the app shows only that network's data." },
+      { p: "Deals, history and balances are separate on each network. A deal created on testnet does not exist on mainnet. When you switch network the page reloads and shows only that network's data. A browser wallet stays connected, and it may ask you to sign a message the next time you do something that needs it. An email wallet asks for a new email code, because it has a separate wallet on each network." },
       { p: "Testnet tokens are free. You can get test USDC from Circle's faucet. The Faucet button is on the dashboard when you are on testnet." },
     ],
   },
