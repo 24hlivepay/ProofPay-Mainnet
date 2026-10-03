@@ -1,39 +1,37 @@
 # ProofPay
 
-Secure peer-to-peer USDC escrow on Arc Testnet.
+Secure peer-to-peer escrow for USDC and EURC on Arc, with a wallet, swap, bridge and onramp around it.
 
-[Live app](https://proofpay.online) · [Demo video](https://youtu.be/O791txQRc5E) · [Smart contract](https://testnet.arcscan.app/address/0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1) · [Deployment transaction](https://testnet.arcscan.app/tx/0xe89ec93681f74ed0e0ffb7fe6368981c106251c7fa0110aa289420f9d299e7e5)
+[Live app](https://proofpay.online) · [Docs](https://proofpay.online/#/docs) · [Demo video](https://youtu.be/O791txQRc5E) · [USDC escrow on Arc Mainnet](https://explorer.arc.io/address/0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B) · [EURC escrow on Arc Mainnet](https://explorer.arc.io/address/0x7894E539a16b0D1aE272BE4ebF998353C6E15C86)
 
-> ProofPay is currently a public testnet MVP. It does not handle real funds and has not been audited.
+> ProofPay is live on Arc Mainnet and Arc Testnet. The contracts are verified on the Arc explorer but have not had an independent audit yet. Use small amounts on mainnet.
 
 ## Why ProofPay
 
-Peer-to-peer online deals often force one side to take the risk first: the buyer pays before delivery, or the seller delivers before payment. ProofPay replaces that trust gap with a transparent escrow flow where test USDC is held by a smart contract and released only after the seller confirms delivery and the buyer approves payment.
+Peer-to-peer online deals often force one side to take the risk first: the buyer pays before delivery, or the seller delivers before payment. ProofPay removes that gap. The buyer locks USDC or EURC in a smart contract, the seller delivers, and the buyer releases the payment. If they cannot agree, either side opens a dispute and the ProofPay admin settles it on chain.
 
-## Final-submission status
+## What it does
 
-The public Arc Testnet MVP supports the complete escrow lifecycle:
+- **Escrow.** A buyer creates a deal locked to the seller's wallet and shares a link. The seller accepts, the buyer deposits, the seller confirms delivery, the buyer releases. After the deposit neither side can take the money out alone.
+- **Deal documents.** Buyer and seller can attach private files (PDF, JPG, PNG, WEBP, up to 10 MB) to a deal. Only the two of them can open the files. The admin cannot.
+- **Disputes.** Either side can open a dispute with a written statement and evidence. The admin can refund the buyer, pay the seller, or split, with one transaction on the escrow contract. Every admin action is written to an audit log.
+- **Wallet.** Balances of every token the address holds on Arc, receive, and send.
+- **Swap.** USDC, EURC and cirBTC on Arc, for browser wallets and for email wallets.
+- **Bridge.** USDC and EURC between Arc and Ethereum, Base, Arbitrum, Optimism, Polygon and Avalanche (EURC: Ethereum and Base), with Circle's forwarder so no gas is needed on the destination chain.
+- **Onramp.** Buy USDC or EURC with a card or bank transfer, delivered to the user's wallet on Arc.
+- **Two ways to sign in.** Email (a Circle user-controlled wallet, no extension needed) or any browser wallet such as MetaMask or Rabby.
+- **Docs.** Every feature explained in plain words at [proofpay.online/#/docs](https://proofpay.online/#/docs).
 
-1. A buyer creates an escrow request and shares a private review link.
-2. The seller connects a wallet, verifies the deal, and accepts or rejects it.
-3. After acceptance, the buyer deposits Arc Testnet USDC, EURC, or cirBTC into the matching escrow contract.
-4. The seller confirms delivery.
-5. The buyer releases the locked funds to the seller.
+## What ProofPay uses Arc for
 
-The web app also includes pending, active, completed, cancelled, and rejected
-order states; persistent off-chain order metadata; transaction links to Arcscan;
-Circle email wallets; and MetaMask and Rabby support. Developer-led testing is
-complete and public testnet testing is ongoing.
-
-## Live evidence
-
-- Public application deployed at [proofpay.online](https://proofpay.online)
-- Escrow contract deployed on Arc Testnet
-- Circle email wallet, MetaMask, and Rabby flows implemented and tested
-- Three completed end-to-end escrow tests across three wallets
-- Persistent order records stored in Neon Postgres
-- Frontend and backend deployed together through Vercel Services
-- Automated escrow lifecycle and authorization tests
+| Arc / Circle building block | Used for |
+| --- | --- |
+| Arc Mainnet and Testnet | The escrow contracts and every deal transaction. Gas is paid in USDC. |
+| USDC and EURC on Arc | The assets held in escrow. |
+| Circle user-controlled wallets | Email sign-in, so a user needs no wallet extension. |
+| App Kit swap | Swapping USDC, EURC and cirBTC on Arc. |
+| App Kit bridge (CCTP, CCTPx, Forwarding Service) | Moving USDC and EURC between Arc and other chains. |
+| App Kit onramp | Buying USDC and EURC with fiat. |
 
 ## Architecture
 
@@ -41,44 +39,41 @@ complete and public testnet testing is ongoing.
 Buyer / Seller
       │
       ▼
-React + Vite frontend
+React + Vite frontend ──── Circle App Kit ───► swap · bridge (CCTP) · onramp
       │
-      ├──────── ethers.js ────────► ProofPayEscrow.sol
+      ├──────── ethers.js ────────► ProofPayEscrowV2 (one per asset)
       │                              │
-      │                              └── Arc Testnet USDC
+      │                              └── USDC / EURC on Arc
       │
       └──────── REST API ─────────► Express backend
                                      │
-                                     └── Neon Postgres
+                                     ├── Neon Postgres (deal records, history, profiles)
+                                     ├── Private file storage (deal documents, evidence)
+                                     └── Circle Wallets API (email wallets)
 ```
 
 ### Stack
 
-- **Frontend:** React 19, Vite, Tailwind CSS, ethers.js
-- **Wallets:** MetaMask and Rabby
-- **Backend:** Express.js
+- **Frontend:** React 19, Vite, Tailwind CSS, ethers.js, Circle App Kit
+- **Wallets:** Circle user-controlled wallets (email), and any EIP-6963 browser wallet
+- **Backend:** Express.js, wallet-signature sessions, admin sign-in with password and email code
 - **Database:** Neon serverless Postgres
-- **Contracts:** Solidity, OpenZeppelin, Hardhat and Foundry
-- **Network:** Arc Testnet
-- **Hosting:** Vercel Services
+- **Contracts:** Solidity 0.8.28, Foundry and Hardhat
+- **Networks:** Arc Mainnet (chain ID 5042) and Arc Testnet (chain ID 5042002)
+- **Hosting:** Vercel
 
 ## Contract details
 
-| Item | Value |
-| --- | --- |
-| Network | Arc Testnet |
-| Chain ID | `5042002` |
-| ProofPay escrow (V2, USDC) | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` |
-| Test USDC | `0x3600000000000000000000000000000000000000` |
-| EURC | `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a` |
-| ProofPay USDC Escrow (V2) | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` |
-| ProofPay EURC Escrow (V2) | `0x7117B300A01C969082DE898F1B1f699F6e8188B3` |
+| Network | USDC escrow (V2) | EURC escrow (V2) |
+| --- | --- | --- |
+| Arc Mainnet | `0xbA8cf9bE18DE912dC98a6422906b1D8F0e56F76B` | `0x7894E539a16b0D1aE272BE4ebF998353C6E15C86` |
+| Arc Testnet | `0xbf28D1d4cb480DDAc52c23670aFECA94D4d719a1` | `0x7117B300A01C969082DE898F1B1f699F6e8188B3` |
 
-On 2026-09-26 the app moved to `ProofPayEscrowV2` on testnet. The original v1 testnet
-escrows (USDC `0xCd0f…C9a`, EURC `0xa432…4ca7`, cirBTC `0x8bfe…Ef4B`) are retired and
-no longer used by the app. No cirBTC escrow is offered on testnet until a V2 one is deployed.
-
-The contract uses `SafeERC20`, `ReentrancyGuard`, participant-only state transitions, and an owner-controlled dispute resolution path.
+The source is `foundry/src/ProofPayEscrowV2.sol`. It has participant-only state
+transitions, a reentrancy guard, an owner-only dispute resolution that can pay
+only the buyer and the seller of that deal, a pause that blocks new deposits but
+never traps existing funds, and a two-step ownership handover. See
+`foundry/AUDIT_PACKAGE.md` for the deployment transactions.
 
 ### Design rule: nobody refunds themselves
 
@@ -105,32 +100,15 @@ The tests in `foundry/test/ProofPayEscrowV2.t.sol` enforce this rule and must ke
 ## Repository structure
 
 ```text
-contracts/   Solidity escrow contract
-scripts/     Hardhat deployment script
-foundry/     Foundry deployment and test workspace
+contracts/   Solidity escrow contract (Hardhat copy)
+scripts/     Hardhat deployment scripts
+foundry/     Foundry sources, deployment scripts and contract tests
 frontend/    React/Vite web application
-backend/     Express API and database integration
-vercel.json  Multi-service production configuration
-docs/        Configuration and judge-testing guides
-submission/  Final form copy and presentation artifacts
+backend/     Express API, tests and database integration
+vercel.json  Production configuration
+docs/        Configuration and testing guides
+submission/  Earlier hackathon submission material
 ```
-
-### Deploy EURC and cirBTC escrow contracts
-
-Use the same deployer account that owns the existing USDC escrow. Keep the
-private key in an encrypted Foundry keystore; do not commit it to the project.
-
-```bash
-cast wallet import proofpay-deployer --interactive
-forge script script/DeployAssetEscrows.s.sol:DeployAssetEscrows \
-  --root foundry \
-  --rpc-url arc \
-  --account proofpay-deployer \
-  --broadcast
-```
-
-Copy the two resulting addresses into `frontend/.env` as
-`VITE_EURC_ESCROW_ADDRESS` and `VITE_CIRBTC_ESCROW_ADDRESS`.
 
 ## Local setup
 
@@ -192,8 +170,8 @@ Run the complete local readiness check from the repository root:
 npm run validate
 ```
 
-This runs frontend lint, a production build, 12 ProofPay escrow contract tests,
-and backend syntax checks. See [Testing and judge walkthrough](docs/TESTING.md)
+This runs frontend lint, a production build, the escrow contract tests,
+and backend checks. See [Testing and judge walkthrough](docs/TESTING.md)
 for the public smoke-test flow.
 
 ## Production configuration
@@ -202,15 +180,14 @@ Use [Configuration](docs/CONFIGURATION.md) to set Vercel, Circle, Neon, domain,
 and contract-deployment values in the correct service. Do not expose Circle API
 keys, database credentials, or deployer private keys in frontend variables.
 
-## Post-submission roadmap
+## Roadmap
 
-- Expand public wallet and device testing
-- Expand automated browser-level end-to-end coverage
-- Complete an independent smart-contract security audit
-- Add multi-signature or decentralized dispute administration
-- Improve mobile onboarding and transaction guidance
-- Complete security and operational reviews before any mainnet deployment
+- Independent smart-contract security audit
+- Move the dispute admin role from a single wallet to a multisig
+- Bridge for email wallets
+- Server-side confirmation of onramp purchases
+- More automated browser-level end-to-end tests
 
 ## License
 
-This repository is provided for hackathon evaluation and testnet experimentation.
+This repository is public so the code can be reviewed. An open-source license has not been chosen yet.
