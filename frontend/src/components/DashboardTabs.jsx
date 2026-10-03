@@ -10,7 +10,8 @@ const TABS = [
   { key: "wallet", label: "Wallet", to: "/wallet" },
   { key: "swap-bridge", label: "Swap / Bridge", to: "/swap" },
   { key: "onramp", label: "Onramp Buy", to: "/onramp" },
-  { key: "docs", label: "Docs", to: "/docs" },
+  // Docs is its own page: it opens in a separate browser tab.
+  { key: "docs", label: "Docs", to: "/docs", newTab: true },
 ];
 
 // The dispute admin does not buy or sell, so their first tab is "Admin"
@@ -28,8 +29,13 @@ function matchesTab(pathname, tab) {
 export default function DashboardTabs({ className = "flex" }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const isAdmin = Boolean(ADMIN_WALLET) && getWalletSession()?.address?.toLowerCase() === ADMIN_WALLET;
-  const tabs = isAdmin ? [ADMIN_TAB, ...TABS.slice(1)] : TABS;
+  const wallet = getWalletSession()?.address?.toLowerCase();
+  const isAdmin = Boolean(ADMIN_WALLET) && wallet === ADMIN_WALLET;
+  // A signed-out visitor (reading the Docs, or opening a seller link) only
+  // gets the Docs tab: every other tab leads to a page that needs a wallet.
+  const tabs = !wallet
+    ? TABS.filter((tab) => tab.key === "docs")
+    : isAdmin ? [ADMIN_TAB, ...TABS.slice(1)] : TABS;
 
   return (
     <div className={`${className} gap-1 overflow-x-auto`}>
@@ -39,7 +45,7 @@ export default function DashboardTabs({ className = "flex" }) {
           <button
             key={tab.key}
             type="button"
-            onClick={() => navigate(tab.to)}
+            onClick={() => (tab.newTab ? window.open(`#${tab.to}`, "_blank", "noopener") : navigate(tab.to))}
             className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold transition ${
               active
                 ? "bg-blue-600 text-white"

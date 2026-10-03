@@ -90,13 +90,14 @@ export default function Hero() {
             Watch ProofPay Demo
           </a>
 
-          <button
-            type="button"
-            onClick={() => navigate("/docs")}
-            className="w-full rounded-xl border border-blue-200 bg-white px-8 py-4 text-base font-semibold text-blue-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+          <a
+            href="#/docs"
+            target="_blank"
+            rel="noreferrer"
+            className="flex w-full items-center justify-center rounded-xl border border-blue-200 bg-white px-8 py-4 text-base font-semibold text-blue-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
           >
             Read the Docs
-          </button>
+          </a>
         </div>
 
         {walletStatus && <p className="mt-5 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">{walletStatus}</p>}

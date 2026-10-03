@@ -53,7 +53,10 @@ export function useWalletBadge() {
       return;
     }
 
-    connect();
+    // Signed out: go to the landing page, which offers both sign-in options
+    // and the full list of wallets, instead of reconnecting to whichever
+    // wallet happened to be used last.
+    navigate("/");
   }
 
   async function handleDisconnect() {
@@ -80,7 +83,7 @@ export function useWalletBadge() {
             : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
         }`}
       >
-        {shortWallet ? `Wallet: ${shortWallet}` : "Connect Wallet"}
+        {shortWallet ? `Wallet: ${shortWallet}` : "Sign in"}
       </button>
 
       {menuOpen && (

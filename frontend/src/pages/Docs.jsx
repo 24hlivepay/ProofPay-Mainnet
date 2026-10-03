@@ -1,17 +1,16 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import Navbar from "../components/Navbar";
+import ProofPayLogo from "../components/ProofPayLogo";
 import CopyButton from "../components/CopyButton";
-import { useWalletBadge } from "../hooks/useWalletBadge";
 import { NETWORKS } from "../config/network";
 import { getEscrowAssets } from "../config/escrowAssets";
 import { DOC_SECTIONS, DOCS_UPDATED } from "../docs/content";
 
 // Public documentation: readable without a wallet, one topic per URL
-// (/docs/<topic>) so a topic can be linked to. The text lives in
-// docs/content.js; this file only lays it out.
+// (/docs/<topic>) so a topic can be linked to. It is its own page with its own
+// small header, opened in a separate browser tab, so reading it never looks
+// like being inside the signed-in app. The text lives in docs/content.js.
 export default function Docs() {
-  const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
   const { sectionId } = useParams();
   const index = Math.max(0, DOC_SECTIONS.findIndex((section) => section.id === sectionId));
@@ -27,10 +26,23 @@ export default function Docs() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Navbar walletSlot={walletSlot} />
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+          <button type="button" onClick={() => open(DOC_SECTIONS[0].id)} className="flex items-center gap-3 text-left">
+            <ProofPayLogo className="h-9 w-9" />
+            <h1 className="text-lg font-bold tracking-tight text-slate-900">ProofPay Docs</h1>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+          >
+            Open ProofPay
+          </button>
+        </div>
+      </header>
       <main className="mx-auto max-w-6xl px-5 py-8 sm:px-6">
-        <h1 className="text-3xl font-bold text-slate-900">ProofPay Docs</h1>
-        <p className="mt-2 text-slate-600">How ProofPay works, in plain words. Last updated {DOCS_UPDATED}.</p>
+        <p className="text-slate-600">How ProofPay works, in plain words. Last updated {DOCS_UPDATED}.</p>
 
         <label className="mt-6 block lg:hidden">
           <span className="text-sm font-semibold text-slate-600">Topic</span>
