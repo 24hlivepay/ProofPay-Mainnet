@@ -370,8 +370,6 @@ export const DOC_SECTIONS = [
       { p: "The PIN belongs to your Circle wallet, not to ProofPay. ProofPay cannot see it or reset it. Recovery, where it is available, is done in Circle's own window." },
       { h: "Where can I check a transaction?" },
       { p: "Every deposit, release, swap and bridge has a link to the block explorer. On Arc Mainnet that is explorer.arc.io." },
-      { h: "I still need help" },
-      { p: "Ask in the Arc House community (community.arc.io), where the ProofPay builder posts updates and answers questions." },
     ],
   },
 ];
