@@ -49,7 +49,7 @@ import {
   getAuditLog,
 } from "./lib/adminAuth.js";
 import { sanitizeActivity, recordActivity, listActivity } from "./lib/activity.js";
-import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp } from "./lib/onramp.js";
+import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp, listOnrampForWallet } from "./lib/onramp.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
@@ -3380,6 +3380,12 @@ function readOnrampLocal() {
     return [];
   }
 }
+
+app.get("/api/onramp/events", requireAuth(), async (req, res) => {
+  await ensureDatabase();
+  const purchases = await listOnrampForWallet(databasePool, req.auth.address, getRequestNetwork(req), readOnrampLocal());
+  return res.json({ success: true, purchases });
+});
 
 app.post("/api/onramp/events", requireAuth(), async (req, res) => {
   const { entry, error } = sanitizeOnrampEvent(req.body);

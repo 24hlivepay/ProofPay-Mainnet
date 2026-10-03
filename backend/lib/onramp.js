@@ -17,6 +17,7 @@
 
 const RECORD_TYPE = "onramp_purchase";
 export const MAX_ONRAMP_RETURNED = 200;
+export const MAX_ONRAMP_FOR_WALLET = 50;
 
 // A later report only replaces the status when it is further along, so a
 // stray "opened" or "not_completed" can never undo a settled purchase.
@@ -99,6 +100,28 @@ export async function recordOnrampEvent(db, wallet, network, entry, localEntries
   const existing = entries.find((item) => item.id === id);
   const record = { id, ...merge(existing, entry, key, network) };
   return existing ? entries.map((item) => (item.id === id ? record : item)) : [...entries, record];
+}
+
+/** One wallet's own attempts on one network, newest first. */
+export async function listOnrampForWallet(db, wallet, network, localEntries) {
+  const key = normalize(wallet);
+  if (!key) return [];
+
+  if (db) {
+    const result = await db.query(
+      `SELECT data FROM proofpay_records
+       WHERE record_type = $1 AND record_id LIKE $2
+       ORDER BY updated_at DESC LIMIT ${MAX_ONRAMP_FOR_WALLET}`,
+      [RECORD_TYPE, `${key}:${network}:%`]
+    );
+    return result.rows.map((row) => row.data);
+  }
+
+  return (Array.isArray(localEntries) ? localEntries : [])
+    .filter((item) => item.wallet === key && item.network === network)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_ONRAMP_FOR_WALLET)
+    .map(({ id, ...rest }) => rest);
 }
 
 /** Every wallet's attempts on one network, newest first -- for the admin page. */

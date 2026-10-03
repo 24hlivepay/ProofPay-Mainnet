@@ -4,7 +4,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp } from "../lib/onramp.js";
+import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp, listOnrampForWallet } from "../lib/onramp.js";
 
 const HASH = `0x${"a".repeat(64)}`;
 const opened = { clientId: "onramp-0001-aaaa", status: "opened" };
@@ -61,5 +61,14 @@ describe("recordOnrampEvent / listOnramp (file mode)", () => {
     local = await save(local, opened, "0xabc", "testnet");
     assert.equal((await listOnramp(null, "mainnet", local)).length, 2);
     assert.equal((await listOnramp(null, "testnet", local)).length, 1);
+  });
+
+  it("shows a wallet only its own attempts", async () => {
+    let local = await save([], opened);
+    local = await save(local, { ...opened, clientId: "onramp-0002-bbbb" }, "0xdef");
+    const mine = await listOnrampForWallet(null, "0xAbC", "mainnet", local);
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].wallet, "0xabc");
+    assert.deepEqual(await listOnrampForWallet(null, "", "mainnet", local), []);
   });
 });
