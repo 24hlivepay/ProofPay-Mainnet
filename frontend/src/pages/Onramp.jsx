@@ -5,7 +5,7 @@ import Navbar from "../components/Navbar";
 import PrimaryButton from "../components/PrimaryButton";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWalletWithOptions } from "../services/wallet";
-import { API_BASE_URL } from "../services/api";
+import api, { API_BASE_URL } from "../services/api";
 import { getNetworkConfig } from "../config/network";
 
 // Buy USDC/EURC on Arc with a card, Apple Pay, Google Pay, or bank transfer,
@@ -23,6 +23,15 @@ import { getNetworkConfig } from "../config/network";
 // WIDGET_URL_ORIGIN_MISMATCH (session.widgetUrl was onramp.arc.io, not the
 // guessed override), so this uses the SDK's default for both networks.
 const kit = new AppKit();
+
+// Tells the server how far this purchase got, for the admin's Onramp list.
+// A courtesy record only -- a failure here must never disturb the purchase.
+function report(clientId, status, payload) {
+  const { amount, tokenSymbol, paymentMethod, orderId, transactionHash, code } = payload || {};
+  api
+    .post("/onramp/events", { clientId, status, amount, tokenSymbol, paymentMethod, orderId, transactionHash, code })
+    .catch(() => {});
+}
 
 export default function Onramp() {
   const { walletSlot, walletAddress } = useWalletBadge();
@@ -55,6 +64,7 @@ export default function Onramp() {
       if (!token) throw new Error("Please connect your wallet and try again.");
 
       setStatus("loading");
+      const clientId = crypto.randomUUID();
       const session = await kit.onramp.fetchSession({
         url: `${API_BASE_URL}/onramp/sessions`,
         headers: { Authorization: `Bearer ${token}` },
@@ -71,7 +81,10 @@ export default function Onramp() {
       widgetRef.current = kit.onramp.mountIframe({
         session,
         container: containerRef.current,
-        onInitializationSuccess: () => setStatus("ready"),
+        onInitializationSuccess: () => {
+          setStatus("ready");
+          report(clientId, "opened");
+        },
         onInitializationError: (envelope) => {
           setStatus("error");
           setMessage(
@@ -80,12 +93,17 @@ export default function Onramp() {
               : "The onramp widget could not start. Try again in a moment."
           );
         },
-        onDepositSubmitted: () => setStatus("submitted"),
-        onDepositSettled: () => {
+        onDepositSubmitted: (envelope) => {
+          setStatus("submitted");
+          report(clientId, "submitted", envelope?.payload);
+        },
+        onDepositSettled: (envelope) => {
+          report(clientId, "settled", envelope?.payload);
           setStatus("settled");
           setMessage(`Your ${network.chainName} balance updates in a few minutes.`);
         },
-        onDepositNotCompleted: () => {
+        onDepositNotCompleted: (envelope) => {
+          report(clientId, "not_completed", { code: envelope?.code });
           setStatus("ready");
           setMessage("That attempt didn't go through. You can try again below.");
         },
