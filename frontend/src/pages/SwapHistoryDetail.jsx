@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import CopyButton from "../components/CopyButton";
-import { ActivityRecord, shortAddress } from "../components/ActivityRecord";
+import { ActivityRecord } from "../components/ActivityRecord";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { getNetworkConfig } from "../config/network";
 import { fetchActivity } from "../services/activity";
@@ -108,12 +108,13 @@ export default function SwapHistoryDetail() {
         sourceChain: item.sourceChain,
         destinationChain: item.destinationChain,
         sourceHash: sourceTx.hash,
+        recipient: item.wallet,
         network,
       }));
     } catch {
       setDestination({ state: "error" });
     }
-  }, [needsDestination, sourceTx?.hash, item?.sourceChain, item?.destinationChain]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [needsDestination, sourceTx?.hash, item?.sourceChain, item?.destinationChain, item?.wallet]);
 
   useEffect(() => {
     lookUpDestination();
