@@ -299,10 +299,10 @@ export const DOC_SECTIONS = [
       { list: [
         "Only the buyer can deposit, and the deal is tied to one buyer and one seller.",
         "After the deposit, neither the buyer nor the seller can take the money out alone.",
-        "The money leaves in only two ways: the buyer releases it to the seller after delivery, or the owner settles a dispute.",
-        "In a dispute the owner can only send the money to the buyer and the seller of that deal, in any split. It cannot be sent anywhere else.",
-        "The owner can pause new deals in an emergency. A pause never traps money: delivery, release and dispute decisions keep working on deals that already exist.",
-        "Ownership can be moved to another address with a two step handover.",
+        "The money leaves in only two ways: the buyer releases it to the seller after delivery, or the ProofPay admin settles a dispute.",
+        "In a dispute the ProofPay admin can only send the money to the buyer and the seller of that deal, in any split. It cannot be sent anywhere else.",
+        "The ProofPay admin can pause new deals in an emergency. A pause never traps money: delivery, release and dispute decisions keep working on deals that already exist.",
+        "The admin role can be moved to another address, for example a multisig, with a two step handover.",
       ] },
       { h: "Contract addresses" },
       { contracts: true },
@@ -310,7 +310,7 @@ export const DOC_SECTIONS = [
       { h: "What is still open" },
       { list: [
         "The contracts have been reviewed by the ProofPay team, but an independent professional audit has not been done yet.",
-        "The contract owner, who settles disputes, is a single admin wallet today.",
+        "The ProofPay admin role, which settles disputes, is held by a single wallet today.",
       ] },
       { note: "Because there is no independent audit yet, do not lock more in a deal than you are willing to risk.", tone: "warn" },
       { h: "Your account" },
