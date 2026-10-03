@@ -32,13 +32,14 @@ export default function Docs() {
             <ProofPayLogo className="h-9 w-9" />
             <h1 className="text-lg font-bold tracking-tight text-slate-900">ProofPay Docs</h1>
           </button>
-          <button
-            type="button"
-            onClick={() => navigate("/")}
+          <a
+            href="#/"
+            target="_blank"
+            rel="noreferrer"
             className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
           >
             Open ProofPay
-          </button>
+          </a>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8 sm:px-6">
