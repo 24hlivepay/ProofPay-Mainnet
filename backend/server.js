@@ -50,6 +50,7 @@ import {
 } from "./lib/adminAuth.js";
 import { sanitizeActivity, recordActivity, listActivity } from "./lib/activity.js";
 import { sanitizeOnrampEvent, recordOnrampEvent, listOnramp, listOnrampForWallet } from "./lib/onramp.js";
+import { allowedOriginsFromEnv, isAllowedOrigin } from "./lib/origins.js";
 import { sanitizeProfile, getProfile, saveProfile } from "./lib/profile.js";
 import { listEscrowsForCaller, pickNewEscrowFields } from "./lib/escrowList.js";
 import { del as delBlob, get as getBlob, head as headBlob, put as putBlob } from "@vercel/blob";
@@ -83,26 +84,13 @@ const app = express();
 // address and the /api/auth/nonce rate limit would be shared by all users.
 app.set("trust proxy", 1);
 
-// PR-4 note: the *.vercel.app wildcard below is intentionally kept until the
-// CORS-hardening PR ships. It will be replaced with a pattern scoped to the
-// "proof-pay" Vercel project name (preview URLs use the project name, not the
-// repo slug). Production traffic uses same-origin /api calls so CORS only
-// matters for localhost dev and Vercel preview branches.
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "https://proofpay.online",
-  "https://www.proofpay.online",
-  process.env.FRONTEND_URL,
-  // VERCEL_URL is set automatically by Vercel for each deployment
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-].filter(Boolean);
+// Only ProofPay's own addresses may call the API from a browser; see
+// lib/origins.js for the list and why.
+const allowedOrigins = allowedOriginsFromEnv();
 
 app.use(cors({
   origin(origin, callback) {
-    const isVercelPreview = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin || "");
-
-    if (!origin || allowedOrigins.includes(origin) || isVercelPreview) {
+    if (isAllowedOrigin(origin, allowedOrigins)) {
       callback(null, true);
       return;
     }
