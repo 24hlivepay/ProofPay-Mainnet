@@ -243,8 +243,15 @@ export default function Swap() {
     // real 0.16 USDC balance. Cap the reserve at half the balance so a
     // small balance still gets a usable (non-zero) Max instead of 0.
     const isNative = getSwapTokenInfo(tokenIn, network.id).isNative;
-    const reserve = isNative ? Math.min(0.05, raw / 2) : 0;
-    const max = Math.max(raw - reserve, 0);
+    // A wallet that swaps through the App Kit pays the swap fee on top of the
+    // amount (the quote lists it in the token being paid), so the whole balance
+    // fails with "Insufficient token balance". A real EURC swap of the full
+    // 88.8027 balance did exactly that, with a 0.0178 EURC fee. 0.1% is kept
+    // back for it. Email wallets send the swap through LI.FI directly, where
+    // the fee comes out of the amount, and swapped a full balance fine.
+    const feeReserve = !isCircleWallet && !isNative ? raw * 0.001 : 0;
+    const reserve = isNative ? Math.min(0.05, raw / 2) : feeReserve;
+    const max = Math.floor(Math.max(raw - reserve, 0) * 1e6) / 1e6;
     setAmountIn(String(max));
     setEstimate(null);
     setStatus("idle");
