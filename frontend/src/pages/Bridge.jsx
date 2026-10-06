@@ -459,7 +459,16 @@ export default function Bridge() {
       setFailedResult(null);
       setMessage(`Switching your wallet to ${sourceInfo.name}...`);
 
-      const quoted = summarizeQuote(estimate, token, amount);
+      // What the dialog and the saved record show. It starts as the quote on
+      // screen; confirmBridge quotes again right before signing and hands
+      // that quote back here, so both always match what the wallet was asked for.
+      let quoted = summarizeQuote(estimate, token, amount);
+      const applyQuote = (live) => {
+        const next = summarizeQuote(live, token, amount);
+        if (!next) return;
+        quoted = next;
+        setDialogInfo((current) => current && { ...current, sent: next.walletTotal, received: next.receive });
+      };
       setDialogInfo({
         token,
         sourceName: sourceInfo.name,
@@ -478,7 +487,7 @@ export default function Bridge() {
 
       setMessage(describeStep("approve"));
       kit.on("*", handleEvent);
-      const result = await action(built.adapter);
+      const result = await action(built.adapter, applyQuote);
       setSteps(result?.steps || []);
 
       if (result?.state === "error") {
@@ -566,7 +575,11 @@ export default function Bridge() {
   }
 
   // Quote again at the moment of sending so the fee added on top is current.
-  const confirmBridge = () => runBridge(async (adapter) => kit.bridge((await quoteBridge(adapter)).params));
+  const confirmBridge = () => runBridge(async (adapter, applyQuote) => {
+    const live = await quoteBridge(adapter);
+    applyQuote(live);
+    return kit.bridge(live.params);
+  });
   const retryBridge = () => runBridge(
     (adapter) => kit.retryBridge(failedResult, { from: adapter, to: adapter }),
     { startProgress: progressFromSteps(failedResult?.steps) }

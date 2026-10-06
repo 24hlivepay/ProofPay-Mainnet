@@ -1447,7 +1447,13 @@ async function waitForCircleChallenge({ network, userToken, challengeId, onEvent
 const KNOWN_SWAP_SPENDER_BY_NETWORK = { mainnet: "0xA4072583658Fae592A3506A42431cb6316a8d40b" };
 const lastSwapSpenderByNetwork = {};
 
-const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, events, createdAt }
+const circleSwapJobs = new Map(); // jobId -> { status, step, challengeId, result, error, events, owner, createdAt }
+
+// A job belongs to the Circle session that started it. Only a fingerprint of
+// that session's token is kept, so the token itself is never stored.
+function circleSwapOwner(userToken) {
+  return crypto.createHash("sha256").update(String(userToken)).digest("hex");
+}
 const CIRCLE_SWAP_JOB_TTL_MS = 15 * 60 * 1000;
 
 // A serverless host can answer the next poll from a different instance than
@@ -1465,6 +1471,7 @@ function persistCircleSwapJob(jobId, job) {
     result: job.result,
     error: job.error,
     events: job.events,
+    owner: job.owner,
     createdAt: job.createdAt,
   });
   job.saving = (job.saving || Promise.resolve())
@@ -1511,7 +1518,7 @@ app.post("/api/swap/circle", async (req, res) => {
 
   pruneCircleSwapJobs();
   const jobId = crypto.randomUUID();
-  circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, events: [], createdAt: Date.now() });
+  circleSwapJobs.set(jobId, { status: "pending", step: null, challengeId: null, result: null, error: null, events: [], owner: circleSwapOwner(userToken), createdAt: Date.now() });
 
   const job = circleSwapJobs.get(jobId);
   // The first poll can land on another instance right after this reply, so
@@ -1647,6 +1654,9 @@ app.post("/api/swap/circle", async (req, res) => {
 });
 
 app.get("/api/swap/circle/:jobId", async (req, res) => {
+  const userToken = getCircleUserToken(req, res);
+  if (!userToken) return;
+
   let job = circleSwapJobs.get(req.params.jobId);
   if (!job) {
     try {
@@ -1655,7 +1665,10 @@ app.get("/api/swap/circle/:jobId", async (req, res) => {
       console.error("[ProofPay] Could not read swap job state:", error.message);
     }
   }
-  if (!job) {
+  // Someone else's job answers exactly like a job that does not exist, so a
+  // job id on its own reveals nothing. (A job saved before owners were
+  // recorded has none; those expire within the hour.)
+  if (!job || (job.owner && job.owner !== circleSwapOwner(userToken))) {
     return res.status(404).json({ message: "Swap job not found or expired." });
   }
   return res.json({
@@ -3309,20 +3322,11 @@ app.get("/api/escrow-stats", async (req, res) => {
     totals[symbol] += Number(escrow.amount) || 0;
     return totals;
   }, { USDC: 0, EURC: 0, cirBTC: 0 });
-  const activeBuyers = new Set(
-    allEscrows.map((escrow) => escrow.buyerWallet?.toLowerCase()).filter(Boolean)
-  ).size;
-  const activeSellers = new Set(
-    allEscrows.map((escrow) => escrow.sellerWallet?.toLowerCase()).filter(Boolean)
-  ).size;
-
   return res.json({
     success: true,
     lockedByAsset,
     executedEscrows,
     liveEscrows: allEscrows.length,
-    activeBuyers,
-    activeSellers,
   });
 });
 
