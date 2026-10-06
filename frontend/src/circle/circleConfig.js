@@ -1,5 +1,6 @@
 import { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 import { getNetworkConfig } from "../config/network";
+import { getNetworkColors } from "../config/networkColors";
 
 // Re-read on every load (the network toggle in Navbar.jsx reloads the page
 // on switch, so this always reflects the currently selected network — see
@@ -16,22 +17,42 @@ export const circleSdk = new W3SSdk({
   },
 });
 
+// Circle's own window (PIN entry and the confirm screen) cannot be drawn by
+// ProofPay -- that is what keeps the PIN and the approval out of our hands --
+// but its colours can be set. They follow the current network's accent, so
+// the window reads as part of the app: green on mainnet, amber on testnet.
+const net = getNetworkColors();
+
 circleSdk.setThemeColor({
   backdrop: "#0f172a",
   backdropOpacity: 0.68,
   bg: "#ffffff",
-  divider: "#dbeafe",
+  divider: net[100],
   success: "#16a34a",
   error: "#dc2626",
   textMain: "#0f172a",
-  textMain2: "#1e3a8a",
+  textMain2: net[800],
   textAuxiliary: "#475569",
   textAuxiliary2: "#64748b",
   textSummary: "#0f172a",
-  textSummaryHighlight: "#2563eb",
+  textSummaryHighlight: net[600],
   textDetailToggle: "#334155",
   textInteractive: "#ffffff",
-  interactiveBg: "#2563eb",
+  interactiveBg: net[600],
+  mainBtnText: "#ffffff",
+  mainBtnTextOnHover: "#ffffff",
+  mainBtnBg: net[600],
+  mainBtnBgOnHover: net[700],
+  secondBtnText: net[700],
+  secondBtnTextOnHover: net[800],
+  secondBtnBorder: net[300],
+  secondBtnBorderOnHover: net[600],
+  secondBtnBgOnHover: net[50],
+  plainBtnText: net[700],
+  plainBtnTextOnHover: net[800],
+  pinDotActivated: net[600],
+  inputBorderFocused: net[600],
+  dropdownBorderIsOpen: net[600],
 });
 
 export function getCircleDeviceId() {
