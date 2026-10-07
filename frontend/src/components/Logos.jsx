@@ -1,12 +1,14 @@
-// Official token and chain logos, served from /public/logos. USDC and EURC are
-// the logos Circle publishes and Ethereum, Base, Optimism and Polygon are the
-// networks' own logos (both via the Trust Wallet assets repo); Arc, Arbitrum
-// and Avalanche come from LI.FI's chain icons. They are local files so the
-// history never depends on an outside image host.
+// Official token and chain logos, served from /public/logos as local files, so
+// the history never depends on an outside image host. USDC and EURC are the
+// logos Circle publishes, and cirBTC's is the one the Arc explorer shows on its
+// token page. Ethereum, Base, Optimism and Polygon are the networks' own logos
+// (all via the Trust Wallet assets repo); Arc, Arbitrum and Avalanche come
+// from LI.FI's chain icons.
 
 const TOKEN_LOGOS = {
   USDC: "/logos/token-usdc.png",
   EURC: "/logos/token-eurc.png",
+  cirBTC: "/logos/token-cirbtc.jpg",
 };
 
 const CHAIN_LOGOS = [
