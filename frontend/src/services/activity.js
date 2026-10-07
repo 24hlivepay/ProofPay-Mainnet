@@ -1,6 +1,6 @@
 import api from "./api";
 import { getCurrentNetworkId } from "../config/network";
-import { getWalletSession } from "./wallet";
+import { connectWalletWithOptions, getWalletSession } from "./wallet";
 
 // Swap / Bridge history. Recording is a courtesy to the user's own history
 // page, so a failure here must never surface as a failed swap or bridge --
@@ -32,6 +32,29 @@ function writePending(list) {
 
 function currentWallet() {
   return String(getWalletSession()?.address || "").toLowerCase();
+}
+
+// True while the stored sign-in still has at least 5 minutes left.
+function sessionIsFresh() {
+  try {
+    const payload = localStorage.getItem("proofpay-jwt").split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(payload)).exp * 1000 - Date.now() > 5 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+// Called as a swap or bridge starts. If the 2 hour sign-in has run out, the
+// wallet is asked to sign in now, at the start where the user expects it,
+// instead of when the record is saved at the end. A declined signature does
+// not stop the swap: the record is kept and sent later (see above).
+export async function ensureSignedIn() {
+  if (sessionIsFresh()) return;
+  try {
+    await connectWalletWithOptions({ requireSignature: true });
+  } catch {
+    // Declined or unavailable: carry on without it.
+  }
 }
 
 export async function recordActivity(entry) {

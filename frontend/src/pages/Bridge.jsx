@@ -8,7 +8,7 @@ import PrimaryButton from "../components/PrimaryButton";
 import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import ProgressDialog from "../components/ProgressDialog";
-import { plainAmount, recordActivity } from "../services/activity";
+import { ensureSignedIn, plainAmount, recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
@@ -454,6 +454,9 @@ export default function Bridge() {
     };
 
     try {
+      // Only from Arc: signing in makes the wallet switch to Arc, which a
+      // bridge from another chain would then have to undo.
+      if (sourceChain === routes.arc) await ensureSignedIn();
       setStatus("bridging");
       setSteps([]);
       setFailedResult(null);
