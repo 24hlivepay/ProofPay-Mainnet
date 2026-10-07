@@ -9,7 +9,7 @@ import SwapBridgeTabs from "../components/SwapBridgeTabs";
 import DetailRow from "../components/DetailRow";
 import SuccessPanel from "../components/SuccessPanel";
 import ProgressDialog from "../components/ProgressDialog";
-import { plainAmount, recordActivity } from "../services/activity";
+import { ensureSignedIn, plainAmount, recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { connectWallet, getCircleAuthSession, getCurrentWalletProvider, getWalletSession } from "../services/wallet";
 import { executeCircleChallenge } from "../circle/circleConfig";
@@ -485,6 +485,7 @@ export default function Swap() {
     setCanResume(false);
     const startedAt = Date.now();
     try {
+      await ensureSignedIn();
       setStatus("swapping");
       setMessage("");
 
