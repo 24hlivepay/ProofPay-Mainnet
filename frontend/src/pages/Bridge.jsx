@@ -65,6 +65,14 @@ const BRIDGE_MAINNET_ENABLED = true;
 // fee handling until a real wallet-signed bridge has confirmed it there.
 const RECEIVE_EXACT_MAINNET_ENABLED = false;
 
+// A wallet that supports EIP-5792 (for example a MetaMask smart account) can
+// take the approval and the transfer as one request, so the user confirms
+// once and the two either both happen or neither does. The SDK asks the
+// wallet and falls back to approve-then-send by itself. This used to be
+// switched off for every wallet; it now runs on testnet, and mainnet keeps
+// the two-step flow until a real wallet has confirmed it there.
+const BATCH_MAINNET_ENABLED = false;
+
 // The SDK ships a definition for every chain it supports (chain id, public
 // RPC, USDC and EURC addresses, explorer). Indexed by its `chain` identifier -- the same
 // string kit.bridge() takes -- so nothing here is a hand-copied address.
@@ -216,6 +224,7 @@ export default function Bridge() {
 
   const sourceChain = direction === "toArc" ? otherChain : routes.arc;
   const destinationChain = direction === "toArc" ? routes.arc : otherChain;
+  const batchingAllowed = network.id !== "mainnet" || BATCH_MAINNET_ENABLED;
   const sourceInfo = CHAIN_INFO[sourceChain];
   const destinationInfo = CHAIN_INFO[destinationChain];
   const sourceGasToken = sourceInfo?.nativeCurrency?.symbol || "ETH";
@@ -294,9 +303,9 @@ export default function Bridge() {
       to: { chain: destinationChain, recipientAddress: walletAddress, useForwarder: true },
       amount: sentAmount,
       token,
-      // Plain approve -> burn. EIP-5792 batching behaves differently from
-      // wallet to wallet; the sequential flow is the predictable one.
-      config: { batchTransactions: false, ...extraConfig },
+      // Where batching is not allowed, force plain approve -> burn. Where it
+      // is, leave the choice to the SDK (it asks the wallet).
+      config: { ...(batchingAllowed ? {} : { batchTransactions: false }), ...extraConfig },
     };
   }
 
@@ -488,7 +497,19 @@ export default function Bridge() {
       await ensureSourceChain(provider);
       setProgress((current) => Math.max(current, 1));
 
-      setMessage(describeStep("approve"));
+      // The same question the SDK asks before it decides to batch, so the
+      // dialog shows one wallet step when the wallet will be asked once.
+      let batched = false;
+      if (batchingAllowed && typeof built.adapter.supportsAtomicBatch === "function") {
+        try {
+          batched = Boolean(await built.adapter.supportsAtomicBatch(sourceInfo));
+        } catch {
+          batched = false;
+        }
+      }
+      if (batched) setDialogInfo((current) => current && { ...current, batched: true });
+
+      setMessage(batched ? "Confirm in your wallet. One confirmation covers the approval and the transfer." : describeStep("approve"));
       kit.on("*", handleEvent);
       const result = await action(built.adapter, applyQuote);
       setSteps(result?.steps || []);
@@ -540,7 +561,10 @@ export default function Bridge() {
               href: step.explorerUrl,
             };
           })
-          .filter(Boolean),
+          .filter(Boolean)
+          // A batched approval and transfer are one transaction: list it once,
+          // as the source transaction.
+          .filter((tx, index, all) => !all.some((other, otherIndex) => otherIndex > index && other.hash === tx.hash)),
       });
       // The dialog is the completion screen: it stays until the user presses
       // OK (also reopened if they had closed it while the bridge ran).
@@ -651,6 +675,17 @@ export default function Bridge() {
         href: stepLinks[step.key],
         status: index < progress ? "done" : index === progress ? (dialogPhase === "error" ? "error" : "active") : "pending",
       }))
+        // One wallet request covers approval and transfer: show them as one
+        // step, active from the moment the wallet is asked.
+        .filter((step) => !(dialogInfo.batched && step.key === "approve"))
+        .map((step) => (dialogInfo.batched && step.key === "send"
+          ? {
+              ...step,
+              label: `Approve and send ${dialogInfo.token} from ${dialogInfo.sourceName}`,
+              hint: "One confirmation in your wallet covers both.",
+              status: progress > 2 ? "done" : progress >= 1 ? (dialogPhase === "error" ? "error" : "active") : "pending",
+            }
+          : step))
     : [];
 
   return (
