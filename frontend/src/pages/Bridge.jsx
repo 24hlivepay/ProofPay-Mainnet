@@ -68,10 +68,11 @@ const RECEIVE_EXACT_MAINNET_ENABLED = false;
 // A wallet that supports EIP-5792 (for example a MetaMask smart account) can
 // take the approval and the transfer as one request, so the user confirms
 // once and the two either both happen or neither does. The SDK asks the
-// wallet and falls back to approve-then-send by itself. This used to be
-// switched off for every wallet; it now runs on testnet, and mainnet keeps
-// the two-step flow until a real wallet has confirmed it there.
-const BATCH_MAINNET_ENABLED = false;
+// wallet and falls back to approve-then-send by itself. Confirmed on testnet
+// with real wallets on 2026-10-09 (MetaMask: one confirmation, Rabby: two),
+// then switched on for mainnet. Set this back to false to return mainnet to
+// the two-step flow for every wallet.
+const BATCH_MAINNET_ENABLED = true;
 
 // The SDK ships a definition for every chain it supports (chain id, public
 // RPC, USDC and EURC addresses, explorer). Indexed by its `chain` identifier -- the same
