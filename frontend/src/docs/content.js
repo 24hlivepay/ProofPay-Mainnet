@@ -244,7 +244,7 @@ export const DOC_SECTIONS = [
         "Bridge works with browser wallets such as MetaMask and Rabby. It is not available for email wallets yet.",
         "You do not need gas on the chain you are sending to. Circle's forwarder delivers the transfer there for you.",
         "You do need gas on the chain you are sending from.",
-        "A bridge has an approval and a transfer. On Arc Mainnet your wallet confirms them one after the other. On testnet, a wallet that can send both together asks you only once.",
+        "A bridge has an approval and a transfer. A wallet that can send both together, like newer MetaMask, asks you only once. Other wallets, like Rabby, ask you twice. Both ways give the same result.",
         "Because of the bridge fee, the amount that arrives can be a little less than the amount you typed. The exact number is shown before you confirm.",
         "Sending to Ethereum costs more than other chains, because Ethereum itself is expensive.",
         "Transfers into Arc usually take seconds. Transfers out of Arc can take longer, depending on the other chain.",
