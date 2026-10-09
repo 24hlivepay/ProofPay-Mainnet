@@ -61,9 +61,11 @@ const BRIDGE_ROUTES = {
 const BRIDGE_MAINNET_ENABLED = true;
 
 // "The amount typed is the amount that arrives" changes which SDK path
-// signs the transfer. It runs on testnet first; mainnet keeps the default
-// fee handling until a real wallet-signed bridge has confirmed it there.
-const RECEIVE_EXACT_MAINNET_ENABLED = false;
+// signs the transfer. It ran on testnet first and was confirmed there with
+// real wallet-signed bridges in both directions (last on 2026-10-09), then
+// switched on for mainnet. Set this back to false to return mainnet to the
+// default handling, where the fee comes out of what arrives.
+const RECEIVE_EXACT_MAINNET_ENABLED = true;
 
 // A wallet that supports EIP-5792 (for example a MetaMask smart account) can
 // take the approval and the transfer as one request, so the user confirms
@@ -147,9 +149,9 @@ function progressFromSteps(steps) {
 //   quoted      EURC (CCTPx). The fee is already quoted in the source
 //               chain's gas token and paid on top; nothing to adjust.
 //   deducted    USDC the default way: the fee comes out of what arrives.
-//               Used on mainnet until receive-exact has been confirmed with
-//               a real wallet on testnet, and on every testnet source chain
-//               that doesn't support feePayment "source".
+//               Used from every source chain that doesn't support
+//               feePayment "source", and on mainnet whenever
+//               RECEIVE_EXACT_MAINNET_ENABLED is off.
 const SOURCE_PAID_CHAINS = new Set(["Base_Sepolia", "Ethereum_Sepolia", "Base", "Ethereum"]);
 
 function feeMode(token, sourceChain, sourceIsArc, networkId) {
