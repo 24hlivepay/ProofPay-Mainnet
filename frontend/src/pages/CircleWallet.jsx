@@ -360,8 +360,12 @@ export default function CircleWallet() {
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
-      <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
-        <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5">
+      <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
+        {/* On a wide screen the green card (address, network and the three tabs)
+            sits on the right, like the account panel of a wallet app, and the
+            page content on the left. On a phone it stays on top. */}
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
+        <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5 lg:order-2 lg:sticky lg:top-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2">
               <p className="font-mono text-xs text-blue-50">
@@ -373,7 +377,7 @@ export default function CircleWallet() {
               {getNetworkConfig().chainName}
             </span>
           </div>
-          <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
             <button
               onClick={() => openView("overview")}
               className={walletTabClass("overview")}
@@ -395,6 +399,7 @@ export default function CircleWallet() {
           </div>
         </section>
 
+        <div className="min-w-0 lg:order-1 lg:[&>*:first-child]:mt-0">
         {status && (
           <p className="mt-5 rounded-xl bg-green-50 p-4 text-sm font-medium text-green-700">
             {status}
@@ -627,6 +632,8 @@ export default function CircleWallet() {
             </form>
           </section>
         )}
+        </div>
+        </div>
       </main>
     </div>
   );
