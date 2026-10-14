@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
-import CopyButton from "../components/CopyButton";
 import { sendCircleToken } from "../services/circleTransactions";
 import {
   connectWallet,
@@ -16,7 +15,6 @@ import { Contract, formatUnits, parseUnits } from "ethers";
 import api from "../services/api";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { getCurrentNetworkId, getExplorerTxUrl, getNetworkConfig } from "../config/network";
-import { shortenAddress } from "../utils/address";
 
 const CIRCLE_FAUCET_URL = "https://faucet.circle.com/?allow=true";
 const ERC20_ABI = [
@@ -329,10 +327,10 @@ export default function CircleWallet() {
       Number(asset.amount || 0) > 0
   );
   const walletTabClass = (tab) =>
-    `rounded-xl px-4 py-2.5 font-bold transition ${
+    `flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition lg:justify-start lg:gap-2.5 lg:px-4 lg:text-base ${
       view === tab
-        ? "bg-white text-blue-700 hover:bg-blue-50"
-        : "border border-white/40 bg-white/10 text-white hover:bg-white/20"
+        ? "bg-blue-600 text-white shadow-sm"
+        : "text-slate-600 hover:bg-slate-100"
     }`;
 
   if (!address) {
@@ -361,45 +359,25 @@ export default function CircleWallet() {
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
       <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
-        {/* On a wide screen the green card (address, network and the three tabs)
-            sits on the right, like the account panel of a wallet app, and the
-            page content on the left. On a phone it stays on top. */}
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
-        <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-4 text-white shadow-md sm:p-5 lg:order-2 lg:sticky lg:top-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2">
-              <p className="font-mono text-xs text-blue-50">
-                {shortenAddress(address)}
-              </p>
-              <CopyButton value={address} variant="light" />
-            </div>
-            <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold">
-              {getNetworkConfig().chainName}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-2.5 sm:grid-cols-3 lg:grid-cols-1">
-            <button
-              onClick={() => openView("overview")}
-              className={walletTabClass("overview")}
-            >
-              ◫ Assets
-            </button>
-            <button
-              onClick={() => openView("receive")}
-              className={walletTabClass("receive")}
-            >
-              ↓ Deposit / Receive
-            </button>
-            <button
-              onClick={() => openView("send")}
-              className={walletTabClass("send")}
-            >
-              ↑ Send Token
-            </button>
-          </div>
-        </section>
+        {/* The tabs are a list on the left of the page content on a wide screen,
+            and a row above it on a phone. */}
+        <div className="lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <nav
+          aria-label="Wallet"
+          className="grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-6 lg:grid-cols-1"
+        >
+          <button onClick={() => openView("overview")} className={walletTabClass("overview")}>
+            <span aria-hidden="true">◫</span> Assets
+          </button>
+          <button onClick={() => openView("receive")} className={walletTabClass("receive")}>
+            <span aria-hidden="true">↓</span> Deposit / Receive
+          </button>
+          <button onClick={() => openView("send")} className={walletTabClass("send")}>
+            <span aria-hidden="true">↑</span> Send Token
+          </button>
+        </nav>
 
-        <div className="min-w-0 lg:order-1 lg:[&>*:first-child]:mt-0">
+        <div className="mt-5 min-w-0 lg:mt-0 lg:[&>*:first-child]:mt-0">
         {status && (
           <p className="mt-5 rounded-xl bg-green-50 p-4 text-sm font-medium text-green-700">
             {status}
