@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import CopyButton from "../components/CopyButton";
+import { TokenLogo } from "../components/Logos";
+import { shortenAddress } from "../utils/address";
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import PrimaryButton from "../components/PrimaryButton";
 import { sendCircleToken } from "../services/circleTransactions";
@@ -21,6 +24,65 @@ const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ];
+
+// The three assets ProofPay knows by address. Anything else a wallet holds is
+// listed under "Other tokens", and only these get a logo and a dollar value,
+// so a look-alike token that merely calls itself "cirBTC" is never dressed up
+// as the real one.
+const CIRBTC_ADDRESS = {
+  mainnet: "0x171A4217b86A807A64eB94757Db6849fb4bDbAA0",
+  testnet: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
+};
+
+function getKnownTokens() {
+  const networkId = getCurrentNetworkId();
+  return [
+    { symbol: "USDC", address: getEscrowAsset("USDC").tokenAddress, decimals: 6 },
+    { symbol: "EURC", address: getEscrowAsset("EURC").tokenAddress, decimals: 6, name: "Euro Coin" },
+    { symbol: "cirBTC", address: CIRBTC_ADDRESS[networkId], decimals: 8, name: "Circle Wrapped Bitcoin" },
+  ];
+}
+
+// "USDC" | "EURC" | "cirBTC" if this asset is that exact token, else null.
+function knownSymbolOf(asset) {
+  const token = asset.token || {};
+  const address = String(token.tokenAddress || "").toLowerCase();
+  if (token.isNative && token.symbol === "USDC") return "USDC";
+  const match = getKnownTokens().find((known) => known.address.toLowerCase() === address);
+  return match ? match.symbol : null;
+}
+
+function AssetRow({ asset, price }) {
+  const symbol = asset.token.symbol || "?";
+  const known = knownSymbolOf(asset);
+  const amount = Number(asset.amount || 0);
+  const usd = known && price && amount ? price * amount : null;
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 font-bold text-blue-700">
+          {known ? <TokenLogo symbol={known} /> : symbol.slice(0, 2)}
+        </span>
+        <div className="min-w-0">
+          <p className="font-bold text-slate-900">{asset.token.symbol || "Unknown token"}</p>
+          <p className="truncate text-sm text-slate-500">
+            {asset.token.name || asset.token.tokenAddress || "Arc asset"}
+          </p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="font-bold text-slate-900">
+          {amount.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+        </p>
+        {usd !== null && (
+          <p className="text-sm text-slate-500">
+            {usd.toLocaleString(undefined, { style: "currency", currency: "USD" })}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Every ERC20 the connected wallet actually holds on Arc, not just the
 // handful ProofPay's escrow contracts know about (USDC/EURC) -- so a token
@@ -80,6 +142,8 @@ export default function CircleWallet() {
   const [error, setError] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showOther, setShowOther] = useState(false);
+  const [prices, setPrices] = useState({});
 
   const loadBalance = useCallback(async () => {
     if (!address) return;
@@ -109,7 +173,39 @@ export default function CircleWallet() {
             standard: "ERC20",
           },
           amount: formatUnits(token.rawValue, token.decimals),
-        }))].filter((asset) => Number(asset.amount || 0) > 0);
+        }))];
+        // The explorer's token list is an indexer and runs behind the chain, so
+        // right after a swap it still shows the old balance. The known tokens
+        // are read from the chain itself instead (as the Swap page does).
+        for (const known of getKnownTokens().filter((token) => token.symbol !== "USDC")) {
+          try {
+            const raw = await new Contract(known.address, ERC20_ABI, provider).balanceOf(address);
+            const index = nextAssets.findIndex(
+              (asset) => asset.token.tokenAddress?.toLowerCase() === known.address.toLowerCase()
+            );
+            const fresh = {
+              token: index >= 0
+                ? nextAssets[index].token
+                : {
+                    id: `arc-${known.address.toLowerCase()}`,
+                    symbol: known.symbol,
+                    name: known.name,
+                    tokenAddress: known.address,
+                    decimals: known.decimals,
+                    isNative: false,
+                    standard: "ERC20",
+                  },
+              amount: formatUnits(raw, known.decimals),
+            };
+            if (index >= 0) nextAssets[index] = fresh;
+            else nextAssets.push(fresh);
+          } catch {
+            // Keep what the explorer reported for this token.
+          }
+        }
+        for (let i = nextAssets.length - 1; i >= 0; i -= 1) {
+          if (!(Number(nextAssets[i].amount || 0) > 0)) nextAssets.splice(i, 1);
+        }
         setAssets(nextAssets);
         setActivity([]);
         setSelectedTokenId((current) =>
@@ -193,6 +289,30 @@ export default function CircleWallet() {
     const timeout = window.setTimeout(loadBalance, 0);
     return () => window.clearTimeout(timeout);
   }, [loadBalance]);
+
+  // Dollar values come from the explorer's token rates; only mainnet has real
+  // ones, and the page works without them.
+  useEffect(() => {
+    if (getCurrentNetworkId() !== "mainnet") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          getKnownTokens().map(async (known) => {
+            const response = await fetch(`${getNetworkConfig().explorerBase}/api/v2/tokens/${known.address}`);
+            const data = await response.json();
+            return [known.symbol, Number(data?.exchange_rate) || null];
+          })
+        );
+        if (!cancelled) setPrices(Object.fromEntries(entries));
+      } catch {
+        // No dollar values then.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function copyAddress() {
     await navigator.clipboard.writeText(address);
@@ -326,11 +446,21 @@ export default function CircleWallet() {
       !["ERC721", "ERC1155"].includes(asset.token.standard) &&
       Number(asset.amount || 0) > 0
   );
-  const walletTabClass = (tab) =>
-    `flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition lg:justify-start lg:gap-2.5 lg:px-4 lg:text-base ${
-      view === tab
-        ? "bg-blue-600 text-white shadow-sm"
-        : "text-slate-600 hover:bg-slate-100"
+  const mainAssets = useMemo(() => {
+    const order = ["USDC", "EURC", "cirBTC"];
+    return assets
+      .filter((asset) => knownSymbolOf(asset))
+      .sort((a, b) => order.indexOf(knownSymbolOf(a)) - order.indexOf(knownSymbolOf(b)));
+  }, [assets]);
+  const otherAssets = useMemo(() => assets.filter((asset) => !knownSymbolOf(asset)), [assets]);
+  const pricedAssets = mainAssets.filter((asset) => prices[knownSymbolOf(asset)]);
+  const totalUsd =
+    getCurrentNetworkId() === "mainnet" && pricedAssets.length > 0
+      ? pricedAssets.reduce((sum, asset) => sum + Number(asset.amount || 0) * prices[knownSymbolOf(asset)], 0)
+      : null;
+  const walletTabClass = (active) =>
+    `rounded-full px-4 py-2 text-sm font-bold transition ${
+      active ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100"
     }`;
 
   if (!address) {
@@ -358,26 +488,69 @@ export default function CircleWallet() {
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar walletSlot={walletSlot} />
-      <main className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
-        {/* The tabs are a list on the left of the page content on a wide screen,
-            and a row above it on a phone. */}
-        <div className="lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-        <nav
-          aria-label="Wallet"
-          className="grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-6 lg:grid-cols-1"
-        >
-          <button onClick={() => openView("overview")} className={walletTabClass("overview")}>
-            <span aria-hidden="true">◫</span> Assets
-          </button>
-          <button onClick={() => openView("receive")} className={walletTabClass("receive")}>
-            <span aria-hidden="true">↓</span> Deposit / Receive
-          </button>
-          <button onClick={() => openView("send")} className={walletTabClass("send")}>
-            <span aria-hidden="true">↑</span> Send Token
-          </button>
-        </nav>
+      <main className="mx-auto max-w-3xl px-5 py-8 sm:px-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5">
+                <p className="font-mono text-xs text-slate-600">{shortenAddress(address)}</p>
+                <CopyButton value={address} />
+              </div>
+              {totalUsd !== null ? (
+                <>
+                  <p className="mt-4 text-sm text-slate-500">Total balance</p>
+                  <p className="text-3xl font-bold text-slate-900">
+                    {totalUsd.toLocaleString(undefined, { style: "currency", currency: "USD" })}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">
+                  {getCurrentNetworkId() === "testnet"
+                    ? "Test tokens have no market value."
+                    : balanceLoading
+                      ? "Loading balance..."
+                      : ""}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => openView("receive")}
+                className="rounded-xl bg-blue-600 px-4 py-2.5 font-bold text-white transition hover:bg-blue-700"
+              >
+                ↓ Deposit / Receive
+              </button>
+              <button
+                onClick={() => openView("send")}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 font-bold text-blue-700 transition hover:bg-blue-100"
+              >
+                ↑ Send
+              </button>
+            </div>
+          </div>
+        </section>
 
-        <div className="mt-5 min-w-0 lg:mt-0 lg:[&>*:first-child]:mt-0">
+        {view === "overview" || view === "activity" ? (
+          <div className="mt-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Wallet">
+            <button role="tab" aria-selected={view === "overview"} onClick={() => openView("overview")} className={walletTabClass(view === "overview")}>
+              Assets
+            </button>
+            <button role="tab" aria-selected={view === "activity"} onClick={() => openView("activity")} className={walletTabClass(view === "activity")}>
+              Activity
+            </button>
+            <button role="tab" aria-selected="false" onClick={() => navigate("/onramp")} className={walletTabClass(false)}>
+              Buy crypto
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => openView("overview")}
+            className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700"
+          >
+            ← Wallet
+          </button>
+        )}
+
         {status && (
           <p className="mt-5 rounded-xl bg-green-50 p-4 text-sm font-medium text-green-700">
             {status}
@@ -439,98 +612,91 @@ export default function CircleWallet() {
         )}
 
         {view === "overview" && (
-          <>
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold text-slate-900">Assets</h2>
+          <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-xl font-bold text-slate-900">Assets</h2>
+              <button onClick={loadBalance} className="font-semibold text-blue-600 hover:text-blue-700">
+                Refresh
+              </button>
+            </div>
+            <div className="mt-3 divide-y divide-slate-100">
+              {!balanceLoading && assets.length === 0 && (
+                <p className="py-6 text-center text-slate-500">
+                  No {getNetworkConfig().chainName} assets detected yet.
+                </p>
+              )}
+              {mainAssets.map((asset) => (
+                <AssetRow key={asset.token.id} asset={asset} price={prices[knownSymbolOf(asset)]} />
+              ))}
+              {otherAssets.length > 0 && (
                 <button
-                  onClick={loadBalance}
-                  className="font-semibold text-blue-600 hover:text-blue-700"
+                  type="button"
+                  onClick={() => setShowOther((open) => !open)}
+                  aria-expanded={showOther}
+                  className="flex w-full items-center justify-between py-4 text-left text-slate-500 hover:text-slate-700"
                 >
-                  Refresh
+                  <span>Other tokens ({otherAssets.length})</span>
+                  <span aria-hidden="true">{showOther ? "▴" : "▾"}</span>
                 </button>
-              </div>
-              <div className="mt-5 divide-y divide-slate-100">
-                {!balanceLoading && assets.length === 0 && (
-                  <p className="py-6 text-center text-slate-500">
-                    No {getNetworkConfig().chainName} assets detected yet.
-                  </p>
-                )}
-                {assets.map((asset) => (
-                  <div key={asset.token.id} className="flex items-center justify-between gap-4 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-                        {(asset.token.symbol || "?").slice(0, 2)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900">
-                          {asset.token.symbol || "Unknown token"}
-                        </p>
-                        <p className="truncate text-sm text-slate-500">
-                          {asset.token.name || asset.token.tokenAddress || "Arc asset"}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-right font-bold text-slate-900">
-                      {Number(asset.amount || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 8,
-                      })}
-                    </p>
-                  </div>
+              )}
+              {showOther &&
+                otherAssets.map((asset) => (
+                  <AssetRow key={asset.token.id} asset={asset} price={prices[knownSymbolOf(asset)]} />
                 ))}
-              </div>
-            </section>
+            </div>
+          </section>
+        )}
 
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <h2 className="text-2xl font-bold text-slate-900">Recent activity</h2>
-              <div className="mt-5 divide-y divide-slate-100">
-                {activity.length === 0 && (
-                  <p className="py-6 text-center text-slate-500">
-                    No wallet transactions yet.
+        {view === "activity" && (
+        <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <h2 className="text-xl font-bold text-slate-900">Recent activity</h2>
+          <div className="mt-5 divide-y divide-slate-100">
+            {activity.length === 0 && (
+              <p className="py-6 text-center text-slate-500">
+                No wallet transactions yet.
+              </p>
+            )}
+            {activity.slice(0, 10).map((transaction) => (
+              (() => {
+                const activityAsset = assets.find(
+                  (asset) => asset.token.id === transaction.tokenId
+                );
+                return (
+              <a
+                key={transaction.id}
+                href={transaction.txHash ? getExplorerTxUrl(transaction.txHash) : undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-between gap-4 py-4 hover:bg-slate-50"
+              >
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {transaction.transactionType === "INBOUND"
+                      ? "Received"
+                      : transaction.operation === "CONTRACT_EXECUTION"
+                        ? "Contract interaction"
+                        : "Sent"}
                   </p>
-                )}
-                {activity.slice(0, 10).map((transaction) => (
-                  (() => {
-                    const activityAsset = assets.find(
-                      (asset) => asset.token.id === transaction.tokenId
-                    );
-                    return (
-                  <a
-                    key={transaction.id}
-                    href={transaction.txHash ? getExplorerTxUrl(transaction.txHash) : undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between gap-4 py-4 hover:bg-slate-50"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {transaction.transactionType === "INBOUND"
-                          ? "Received"
-                          : transaction.operation === "CONTRACT_EXECUTION"
-                            ? "Contract interaction"
-                            : "Sent"}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {transaction.createDate
-                          ? new Date(transaction.createDate).toLocaleString()
-                          : getNetworkConfig().chainName}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900">
-                        {transaction.amounts?.[0] || "—"} {transaction.token?.symbol || activityAsset?.token?.symbol || ""}
-                      </p>
-                      <p className="mt-1 text-xs font-bold text-blue-600">
-                        {transaction.state}
-                      </p>
-                    </div>
-                  </a>
-                    );
-                  })()
-                ))}
-              </div>
-            </section>
-          </>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {transaction.createDate
+                      ? new Date(transaction.createDate).toLocaleString()
+                      : getNetworkConfig().chainName}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-900">
+                    {transaction.amounts?.[0] || "—"} {transaction.token?.symbol || activityAsset?.token?.symbol || ""}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-blue-600">
+                    {transaction.state}
+                  </p>
+                </div>
+              </a>
+                );
+              })()
+            ))}
+          </div>
+        </section>
         )}
 
         {view === "send" && (
@@ -610,8 +776,6 @@ export default function CircleWallet() {
             </form>
           </section>
         )}
-        </div>
-        </div>
       </main>
     </div>
   );
