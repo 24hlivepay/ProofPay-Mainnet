@@ -486,6 +486,14 @@ export default function CircleWallet() {
     getCurrentNetworkId() === "mainnet" && pricedAssets.length > 0
       ? pricedAssets.reduce((sum, asset) => sum + Number(asset.amount || 0) * prices[knownSymbolOf(asset)], 0)
       : null;
+  // The open one of Deposit / Send is solid; on the Assets and Activity tabs
+  // Deposit is the solid one.
+  const actionButtonClass = (solid) =>
+    `rounded-xl px-4 py-2.5 font-bold transition ${
+      solid
+        ? "bg-blue-600 text-white hover:bg-blue-700"
+        : "border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+    }`;
   const walletTabClass = (active) =>
     `rounded-full px-4 py-2 text-sm font-bold transition ${
       active ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100"
@@ -544,13 +552,13 @@ export default function CircleWallet() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => openView("receive")}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 font-bold text-white transition hover:bg-blue-700"
+                className={actionButtonClass(view !== "send")}
               >
                 ↓ Deposit / Receive
               </button>
               <button
                 onClick={() => openView("send")}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 font-bold text-blue-700 transition hover:bg-blue-100"
+                className={actionButtonClass(view === "send")}
               >
                 ↑ Send
               </button>
