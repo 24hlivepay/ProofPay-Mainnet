@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { QRCodeSVG } from "qrcode.react";
 import CopyButton from "../components/CopyButton";
 import { TokenLogo } from "../components/Logos";
 import { shortenAddress } from "../utils/address";
@@ -611,7 +612,7 @@ export default function CircleWallet() {
         {view === "receive" && (
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <h2 className="text-2xl font-bold text-slate-900">
-              Deposit / Receive Tokens
+              Deposit / Receive
             </h2>
             <p className="mt-2 leading-6 text-slate-600">
               Send only {getNetworkConfig().chainName} assets to this address. Tokens from
@@ -620,19 +621,37 @@ export default function CircleWallet() {
                 ? " Test tokens have no financial value."
                 : " These are real funds."}
             </p>
-            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
-                Your deposit address
-              </p>
-              <p className="mt-3 break-all font-mono text-sm text-slate-900">
-                {address}
-              </p>
-              <button
-                onClick={copyAddress}
-                className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                {copied ? "Address copied" : "Copy address"}
-              </button>
+            <div className="mt-6 flex flex-wrap items-center gap-6">
+              {/* Only the address is encoded (no amount or token), so any wallet's
+                  scanner can read it. White background and a quiet zone around
+                  the code keep it scannable in dark themes too. */}
+              <div className="shrink-0 rounded-xl border border-slate-200 bg-white p-3">
+                <QRCodeSVG
+                  value={address}
+                  size={168}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#111827"
+                  title="QR code of your wallet address"
+                />
+              </div>
+              <div className="min-w-[14rem] flex-1">
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
+                  Your deposit address
+                </p>
+                <p className="mt-3 break-all font-mono text-sm leading-6 text-slate-900">
+                  {address}
+                </p>
+                <button
+                  onClick={copyAddress}
+                  className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  {copied ? "Address copied" : "Copy address"}
+                </button>
+                <p className="mt-4 text-sm leading-5 text-slate-500">
+                  Scan the code with another wallet app to send to this address.
+                </p>
+              </div>
             </div>
             {getCurrentNetworkId() === "testnet" && (
               <a
