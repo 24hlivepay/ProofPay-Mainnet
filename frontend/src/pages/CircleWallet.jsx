@@ -117,6 +117,34 @@ async function fetchHeldTokens(address, explorerBase) {
     }));
 }
 
+// The wallet's recent transfers of the three known tokens, newest first, from
+// the explorer (field names checked against a real address on explorer.arc.io:
+// from.hash, to.hash, timestamp, token.{address_hash,symbol}, total.{value,
+// decimals}, transaction_hash). Shaped like the Circle transaction list so the
+// Activity tab can draw both the same way. Transfers of other tokens are left
+// out: most of them are unsolicited airdrops.
+async function fetchWalletTransfers(address, explorerBase) {
+  const response = await fetch(`${explorerBase}/api/v2/addresses/${address}/token-transfers?type=ERC-20`);
+  if (!response.ok) return [];
+  const { items = [] } = await response.json();
+  const known = new Set(getKnownTokens().map((token) => token.address.toLowerCase()));
+  const me = address.toLowerCase();
+
+  return items
+    .filter((item) => known.has(String(item.token?.address_hash || "").toLowerCase()))
+    .slice(0, 20)
+    .map((item) => ({
+      id: `${item.transaction_hash}-${item.log_index}`,
+      transactionType: String(item.to?.hash || "").toLowerCase() === me ? "INBOUND" : "OUTBOUND",
+      operation: "TRANSFER",
+      createDate: item.timestamp,
+      amounts: [formatUnits(item.total?.value || "0", Number(item.total?.decimals || item.token.decimals || 0))],
+      token: { symbol: item.token.symbol },
+      state: "COMPLETE",
+      txHash: item.transaction_hash,
+    }));
+}
+
 export default function CircleWallet() {
   const { walletSlot } = useWalletBadge();
   const navigate = useNavigate();
@@ -207,7 +235,7 @@ export default function CircleWallet() {
           if (!(Number(nextAssets[i].amount || 0) > 0)) nextAssets.splice(i, 1);
         }
         setAssets(nextAssets);
-        setActivity([]);
+        setActivity(await fetchWalletTransfers(address, getNetworkConfig().explorerBase).catch(() => []));
         setSelectedTokenId((current) =>
           nextAssets.some((asset) => asset.token.id === current)
             ? current
