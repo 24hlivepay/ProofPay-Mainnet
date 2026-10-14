@@ -12,6 +12,8 @@ import { ensureSignedIn, plainAmount, recordActivity } from "../services/activit
 import { useWalletBadge } from "../hooks/useWalletBadge";
 import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
+import { getEscrowAsset } from "../config/escrowAssets";
+import { ARC_DOMAIN, fetchOpenEurcDomains } from "../services/eurcRoutes";
 
 const BALANCE_ABI = ["function balanceOf(address account) view returns (uint256)"];
 
@@ -33,9 +35,8 @@ const BRIDGE_ROUTES = {
     arc: "Arc",
     chains: {
       USDC: ["Ethereum", "Base", "Arbitrum", "Optimism", "Polygon", "Avalanche"],
-      // Avalanche is left out on purpose: Circle's CCTPx registry has EURC
-      // switched off there (quote answers TOKEN_NOT_SUPPORTED_ON_ROUTE, both
-      // directions), so listing it only produced a "quote failed" error.
+      // What shows before Circle's registry has been read, or if it cannot be.
+      // The chains actually offered come from the registry (see EURC_CANDIDATES).
       EURC: ["Ethereum", "Base"],
     },
   },
@@ -53,6 +54,14 @@ const BRIDGE_ROUTES = {
       EURC: ["Ethereum_Sepolia", "Base_Sepolia", "Avalanche_Fuji"],
     },
   },
+};
+
+// Every chain where the SDK has an EURC deployment that this app can bridge
+// to. Only the ones Circle's registry marks as enabled are offered, so a route
+// Circle switches on later (EURC to Avalanche, for example) appears by itself.
+const EURC_CANDIDATES = {
+  mainnet: ["Ethereum", "Base", "Avalanche"],
+  testnet: ["Ethereum_Sepolia", "Base_Sepolia", "Avalanche_Fuji"],
 };
 
 // Mainnet was held back until a real wallet-signed bridge was confirmed end
@@ -202,6 +211,8 @@ export default function Bridge() {
   const [direction, setDirection] = useState("toArc"); // toArc | fromArc
   const [token, setToken] = useState("USDC");
   const [otherChain, setOtherChain] = useState(routes.chains.USDC[1]);
+  const [eurcChains, setEurcChains] = useState(routes.chains.EURC);
+  const chainsFor = (symbol) => (symbol === "EURC" ? eurcChains : routes.chains[symbol]);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("idle"); // idle | estimating | ready | bridging | done | error
   // { estimate, mode, sentAmount } -- see feeMode(). Named "estimate" for the
@@ -267,11 +278,39 @@ export default function Bridge() {
     setToken(nextToken);
     // EURC exists on fewer chains than USDC -- keep the chain if the new
     // token supports it, otherwise fall back to the first one that does.
-    if (!routes.chains[nextToken].includes(otherChain)) {
-      setOtherChain(routes.chains[nextToken][0]);
+    const list = chainsFor(nextToken);
+    if (list.length && !list.includes(otherChain)) {
+      setOtherChain(list[0]);
     }
     resetQuote();
   }
+
+  // Read which EURC routes Circle has open right now. Until it answers (or if
+  // it cannot be reached) the fallback list above stays in place.
+  useEffect(() => {
+    let active = true;
+    fetchOpenEurcDomains(network.id, getEscrowAsset("EURC", network.id).tokenAddress).then((open) => {
+      if (!active || !open) return;
+      const next = open.has(ARC_DOMAIN)
+        ? EURC_CANDIDATES[network.id].filter((chain) => open.has(CHAIN_INFO[chain]?.cctp?.domain))
+        : [];
+      setEurcChains(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [network.id]);
+
+  // If the open EURC routes change while EURC is selected, keep the chosen
+  // chain only if it is still offered.
+  useEffect(() => {
+    if (token !== "EURC") return;
+    if (!eurcChains.length) {
+      setToken("USDC");
+    } else if (!eurcChains.includes(otherChain)) {
+      setOtherChain(eurcChains[0]);
+    }
+  }, [token, eurcChains, otherChain]);
 
   // Leaving Arc with USDC, gas is paid out of the same balance -- keep a
   // small reserve (same reasoning as Swap's Max button).
@@ -646,7 +685,7 @@ export default function Bridge() {
         className="cursor-pointer rounded-lg bg-transparent py-1 pr-1 text-sm font-bold text-slate-900 focus:outline-none"
         aria-label="Choose blockchain"
       >
-        {routes.chains[token].map((chain) => (
+        {chainsFor(token).map((chain) => (
           <option key={chain} value={chain}>{CHAIN_INFO[chain]?.name || chain}</option>
         ))}
       </select>
@@ -738,7 +777,9 @@ export default function Bridge() {
                     type="button"
                     role="tab"
                     aria-selected={token === symbol}
-                    disabled={busy}
+                    // No open EURC route at all (Circle has it paused): nothing to offer.
+                    disabled={busy || chainsFor(symbol).length === 0}
+                    title={chainsFor(symbol).length === 0 ? `${symbol} bridging is paused by Circle right now.` : undefined}
                     onClick={() => changeToken(symbol)}
                     className={
                       token === symbol
