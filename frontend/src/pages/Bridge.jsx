@@ -10,7 +10,7 @@ import DetailRow from "../components/DetailRow";
 import ProgressDialog from "../components/ProgressDialog";
 import { ensureSignedIn, plainAmount, recordActivity } from "../services/activity";
 import { useWalletBadge } from "../hooks/useWalletBadge";
-import { ensureArcNetwork, getCurrentWalletProvider } from "../services/wallet";
+import { ensureArcNetwork, getCurrentWalletProvider, isMissingChainError } from "../services/wallet";
 import { getNetworkConfig } from "../config/network";
 import { getEscrowAsset } from "../config/escrowAssets";
 import { ARC_DOMAIN, fetchOpenEurcDomains } from "../services/eurcRoutes";
@@ -458,7 +458,7 @@ export default function Bridge() {
     try {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
     } catch (error) {
-      const isMissingChain = error?.code === 4902 || /unrecognized chain|unknown chain/i.test(error?.message || "");
+      const isMissingChain = isMissingChainError(error);
       if (!isMissingChain) throw error;
       await provider.request({
         method: "wallet_addEthereumChain",

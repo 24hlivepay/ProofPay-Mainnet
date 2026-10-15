@@ -111,6 +111,16 @@ function getWalletLabel(walletType) {
   );
 }
 
+// A wallet tells us a network is missing in different ways. MetaMask uses
+// error code 4902 (EIP-3085), sometimes wrapped inside data.originalError on
+// mobile; Rabby sends no code and only an "Unrecognized chain ID" message.
+// All of them mean the same thing: add the network, then switch.
+export function isMissingChainError(error) {
+  return error?.code === 4902
+    || error?.data?.originalError?.code === 4902
+    || /unrecognized chain|unknown chain/i.test(error?.message || "");
+}
+
 export async function ensureArcNetwork(onStatus, walletProvider) {
   const network = getNetworkConfig();
   const walletType = localStorage.getItem("proofpay-wallet-type") || "metamask";
@@ -136,7 +146,7 @@ export async function ensureArcNetwork(onStatus, walletProvider) {
     });
     return "switched";
   } catch (error) {
-    if (error.code === 4902) {
+    if (isMissingChainError(error)) {
       try {
         onStatus?.(`${network.chainName} is not in ${walletLabel}. Adding it now...`);
         await ethereum.request({
