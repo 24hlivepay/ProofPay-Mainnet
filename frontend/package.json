@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@circle-fin/adapter-viem-v2": "^1.18.0",
-    "@circle-fin/app-kit": "^1.15.3",
+    "@circle-fin/app-kit": "^1.19.0",
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@tailwindcss/vite": "^4.3.3",
     "@vercel/blob": "^2.8.0",

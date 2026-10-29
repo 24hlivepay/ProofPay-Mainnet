@@ -1220,7 +1220,7 @@ const LIFI_API_URL = "https://li.quest/v1";
 const SWAP_CHAIN_ID_BY_NETWORK = { mainnet: 5042, testnet: 5042002 };
 const SWAP_RPC_URL_BY_NETWORK = {
   mainnet: "https://rpc.mainnet.arc.io",
-  testnet: "https://rpc.testnet.arc.network",
+  testnet: "https://rpc.testnet.arc.io",
 };
 const ERC20_ALLOWANCE_ABI = ["function allowance(address owner, address spender) view returns (uint256)"];
 

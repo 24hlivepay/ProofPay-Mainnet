@@ -38,7 +38,7 @@ export const CHAIN_STATUS = Object.freeze({
 // arc-studio-allow-onchain-literal
 const ARC_RPC_FALLBACK = {
   mainnet: "https://rpc.mainnet.arc.io",       // arc-studio-allow-onchain-literal
-  testnet: "https://rpc.testnet.arc.network",  // arc-studio-allow-onchain-literal
+  testnet: "https://rpc.testnet.arc.io",  // arc-studio-allow-onchain-literal
 };
 
 /**

@@ -17,7 +17,7 @@ One contract is deployed per token. The constructor takes the token address (var
 
 ## 2. Deployments
 
-Chain: Arc by Circle. Mainnet chain id 5042 (`https://rpc.mainnet.arc.io`, explorer `explorer.arc.io`), testnet 5042002 (`https://rpc.testnet.arc.network`, explorer `testnet.arcscan.app`). The chain's gas token is USDC. The ERC-20 interface of USDC lives at `0x3600000000000000000000000000000000000000` (6 decimals) while native balances use 18 decimals.
+Chain: Arc by Circle. Mainnet chain id 5042 (`https://rpc.mainnet.arc.io`, explorer `explorer.arc.io`), testnet 5042002 (`https://rpc.testnet.arc.io`, explorer `testnet.arcscan.app`). The chain's gas token is USDC. The ERC-20 interface of USDC lives at `0x3600000000000000000000000000000000000000` (6 decimals) while native balances use 18 decimals.
 
 | Network | Token | Escrow contract | Deploy tx |
 |---|---|---|---|
