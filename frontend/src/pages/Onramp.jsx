@@ -22,7 +22,7 @@ import { getExplorerTxUrl, getNetworkConfig } from "../config/network";
 // A guessed sandbox subdomain here previously made mountIframe throw
 // WIDGET_URL_ORIGIN_MISMATCH (session.widgetUrl was onramp.arc.io, not the
 // guessed override), so this uses the SDK's default for both networks.
-const kit = new AppKit();
+const kit = new AppKit({ disableAnalytics: true }); // no usage events to Circle
 
 const PURCHASE_STATUS = {
   submitted: "Payment submitted",
