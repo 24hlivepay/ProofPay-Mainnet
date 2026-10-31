@@ -61,7 +61,7 @@ function getSwapTokenInfo(symbol, networkId) {
   return getEscrowAsset(symbol, networkId);
 }
 
-const kit = new AppKit();
+const kit = new AppKit({ disableAnalytics: true }); // no usage events to Circle
 
 // Circle's swap service sometimes answers "No route available" for a pair
 // it quotes fine a second later (seen on Arc Testnet: the same request

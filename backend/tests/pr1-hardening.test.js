@@ -367,7 +367,7 @@ describe("/resolved on-chain checks", () => {
 // ---------------------------------------------------------------------------
 
 describe("getArcProvider RPC fallback", () => {
-  const FALLBACK = { mainnet: "https://rpc.mainnet.arc.io", testnet: "https://rpc.testnet.arc.network" }; // arc-studio-allow-onchain-literal
+  const FALLBACK = { mainnet: "https://rpc.mainnet.arc.io", testnet: "https://rpc.testnet.arc.io" }; // arc-studio-allow-onchain-literal
 
   function resolveRpcUrl(network, env = {}) {
     return (network === "mainnet" ? env.ARC_MAINNET_RPC_URL : env.ARC_TESTNET_RPC_URL) || FALLBACK[network];

@@ -94,7 +94,7 @@ const CHAIN_INFO = Object.fromEntries(
     .map((entry) => [entry.chain, entry])
 );
 
-const kit = new AppKit();
+const kit = new AppKit({ disableAnalytics: true }); // no usage events to Circle
 
 // The steps the progress dialog walks through, in order. "switch" is ours (the
 // wallet changing network); the rest map onto the SDK's step names. The SDK

@@ -28,7 +28,7 @@ export const NETWORKS = {
     chainId: 5042002,
     chainHex: "0x4cef52",
     chainName: "Arc Testnet",
-    rpcUrl: "https://rpc.testnet.arc.network",
+    rpcUrl: "https://rpc.testnet.arc.io",
     // testnet.arcscan.app now 301-redirects here, and that redirect fails
     // in-browser (fetch TypeError: Failed to fetch) even though it works
     // fine with curl -- confirmed live, 2026-10-01. Point at the real host
